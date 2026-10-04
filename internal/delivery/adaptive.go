@@ -411,11 +411,9 @@ func (p *Relay) serveAdaptive(w http.ResponseWriter, r *http.Request, s model.St
 		return
 	}
 	defer audio.Close()
-	p.mu.Lock()
-	p.next++
-	key := p.next
-	p.active[key] = Active{s.Name, time.Now().UTC()}
-	p.mu.Unlock()
+	playing := s
+	playing.Codec = "MP3"
+	key := p.beginPlayback(r, playing, http.Header{"Icy-Br": {"128"}})
 	p.Store.Log("", "Stream connected", s.Name+": "+strings.ToUpper(kind)+" converted to MP3")
 	defer func() {
 		p.mu.Lock()

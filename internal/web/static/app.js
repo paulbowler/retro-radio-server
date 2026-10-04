@@ -168,3 +168,6 @@ document.addEventListener("play", event => {
 document.addEventListener("pause", event => {
  if (event.target instanceof HTMLAudioElement && event.target.matches(".station-player") && event.target.readyState > 0) event.target.load();
 }, true);
+
+// Keep the station placeholder visible if directory artwork is unavailable.
+document.addEventListener("error", event => { if (event.target.matches?.("img[data-station-artwork]")) event.target.hidden=true; },true);

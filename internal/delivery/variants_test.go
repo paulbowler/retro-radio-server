@@ -41,7 +41,7 @@ func TestStreamRankingCompatibilityQualityAndOverride(t *testing.T) {
 		t.Fatal("recent failure preferred")
 	}
 	play, chosen, err := RadioPlayURL("http://radio.local", s, model.Device{ID: "kitchen", Capabilities: model.LegacyXML}, "low")
-	if err != nil || chosen.VariantID != "low" || play != "http://radio.local/stream/channel?device=kitchen" {
+	if err != nil || chosen.VariantID != "low" || play != "http://radio.local/stream/channel?radio=kitchen&device=kitchen" {
 		t.Fatal(play, chosen, err)
 	}
 }

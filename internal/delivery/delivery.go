@@ -181,8 +181,15 @@ func (p *Relay) request(req *http.Request) (*http.Response, error) {
 }
 
 type Active struct {
-	Station string    `json:"station"`
-	Since   time.Time `json:"since"`
+	StationID   string    `json:"station_id,omitempty"`
+	Device      string    `json:"device,omitempty"`
+	Title       string    `json:"title,omitempty"`
+	Codec       string    `json:"codec,omitempty"`
+	Bitrate     int       `json:"bitrate_kbps,omitempty"`
+	Genre       string    `json:"genre,omitempty"`
+	Description string    `json:"description,omitempty"`
+	Station     string    `json:"station"`
+	Since       time.Time `json:"since"`
 }
 type Relay struct {
 	Store         *store.Store
@@ -261,7 +268,15 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 		return
 	}
 	defer res.Body.Close()
+	stripMetadata := res.Header.Get("Icy-MetaInt") != "" && r.Header.Get("Icy-MetaData") != "1"
+	if stripMetadata && newICYObserver(res.Header.Get("Icy-MetaInt"), func(string) {}) == nil {
+		http.Error(w, "invalid stream metadata", 502)
+		return
+	}
 	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Icy-MetaInt", "Icy-Br", "Icy-Description", "Icy-Genre", "Icy-Name", "Ice-Audio-Info", "Icy-Url"} {
+		if stripMetadata && (h == "Icy-MetaInt" || h == "Content-Length") {
+			continue
+		}
 		if v := res.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
 		}
@@ -271,11 +286,8 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 	if r.Method == "HEAD" || res.StatusCode == 416 {
 		return
 	}
-	p.mu.Lock()
-	p.next++
-	key := p.next
-	p.active[key] = Active{s.Name, time.Now().UTC()}
-	p.mu.Unlock()
+	key := p.beginPlayback(r, s, res.Header)
+	observer := newICYObserver(res.Header.Get("Icy-MetaInt"), func(title string) { p.observeMetadata(key, title) })
 	p.Store.Log("", "Stream connected", s.Name+": "+res.Request.URL.Scheme+" upstream relayed over HTTP")
 	defer func() {
 		p.mu.Lock()
@@ -291,8 +303,9 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 	for {
 		n, readErr := res.Body.Read(buf)
 		if n > 0 {
+			payload := observer.Process(buf[:n], stripMetadata)
 			_ = rc.SetWriteDeadline(time.Now().Add(15 * time.Second))
-			if _, err := w.Write(buf[:n]); err != nil {
+			if _, err := w.Write(payload); err != nil {
 				return
 			}
 			if err := rc.Flush(); err != nil {

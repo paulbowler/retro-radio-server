@@ -57,7 +57,7 @@ func TestPodcastMenuEpisodesAndLookup(t *testing.T) {
 		t.Fatal(second)
 	}
 	lookup := get("Search.asp?sSearchtype=5&Search=" + first.Items[1].EpisodeID)
-	if lookup.Count != 1 || lookup.Items[1].EpisodeURL != h.Base+"/episode/"+first.Items[1].EpisodeID || lookup.Items[1].ShowMime != "MP3" || lookup.Items[1].ShowName != p.Title {
+	if lookup.Count != 1 || !strings.HasPrefix(lookup.Items[1].EpisodeURL, h.Base+"/episode/"+first.Items[1].EpisodeID+"?radio=") || lookup.Items[1].ShowMime != "MP3" || lookup.Items[1].ShowName != p.Title {
 		t.Fatal(lookup)
 	}
 }

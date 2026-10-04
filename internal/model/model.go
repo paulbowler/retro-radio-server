@@ -18,6 +18,7 @@ type Capabilities struct {
 var LegacyXML = Capabilities{HTTP: true, MP3: true, AAC: true, ICY: true}
 
 type Station struct {
+	Favicon   string          `json:"favicon,omitempty"`
 	Homepage  string          `json:"homepage,omitempty"`
 	VariantID string          `json:"-"`
 	Variants  []StreamVariant `json:"streams,omitempty"`
@@ -54,6 +55,7 @@ type Event struct {
 
 // Candidate is cached catalogue information, not yet a managed station.
 type Candidate struct {
+	Favicon     string      `json:"favicon"`
 	Homepage    string      `json:"homepage"`
 	Variants    []Candidate `json:"variants,omitempty"`
 	UUID        string      `json:"stationuuid"`

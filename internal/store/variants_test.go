@@ -50,6 +50,12 @@ func TestMigrationMergesVariantsPreservingFavouritesAndOldLinks(t *testing.T) {
 	if err = s.migrateV6(); err != nil {
 		t.Fatal(err)
 	}
+	if err = s.migrateV7(); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.migrateV8(); err != nil {
+		t.Fatal(err)
+	}
 	stations, err := s.Stations("")
 	if err != nil || len(stations) != 1 || len(stations[0].Variants) != 2 {
 		t.Fatal("streams lost or duplicated", stations, err)

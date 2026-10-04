@@ -27,6 +27,7 @@ import (
 //go:embed dashboard.html static/*
 var assets embed.FS
 var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
+	"listeningDuration":    listeningDuration,
 	"stationListenURL":     stationListenURL,
 	"podcastDuration":      podcastDuration,
 	"addOne":               func(n int) int { return n + 1 },
@@ -46,6 +47,7 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 }).ParseFS(assets, "dashboard.html"))
 
 type App struct {
+	ArtworkClient        *http.Client
 	enrichmentMu         sync.Mutex
 	enrichmentAt         map[string]time.Time
 	Podcasts             *podcast.Service
@@ -117,6 +119,8 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
+	Radios                                      []radioOverview
+	PlayingRadios                               int
 	Podcasts                                    []model.Podcast
 	Podcast                                     *model.Podcast
 	Episodes                                    []model.Episode
@@ -178,6 +182,9 @@ func (a *App) Handler() http.Handler {
 	if a.Podcasts == nil {
 		a.Podcasts = podcast.New(a.Store)
 	}
+	if a.ArtworkClient == nil {
+		a.ArtworkClient = delivery.NewClient()
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /", a.screen)
@@ -186,6 +193,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /stations/listen", a.listenCandidate)
 	mux.HandleFunc("GET /activity/live", a.activity)
 	mux.HandleFunc("GET /dashboard/live", a.dashboardLive)
+	mux.HandleFunc("GET /stations/{station}/artwork", a.stationArtwork)
 	mux.HandleFunc("GET /dashboard/discoveries", a.discoveries)
 	mux.HandleFunc("GET /stations/discoveries", a.discoveries)
 	mux.HandleFunc("POST /devices/rename", a.rename)
@@ -412,6 +420,29 @@ func (a *App) dashboardView(v *view) error {
 	}
 	v.StationCount = len(stations)
 	v.Active = a.Relay.Active()
+	for _, d := range v.Devices {
+		f, err := a.Store.Favourites(d.ID)
+		if err != nil {
+			return err
+		}
+		radio := radioOverview{Device: d, Favourites: len(f)}
+		for _, playing := range v.Active {
+			if playing.Device == d.ID && (radio.Playing == nil || playing.Since.After(radio.Playing.Since)) {
+				current := playing
+				radio.Playing = &current
+			}
+		}
+		if radio.Playing != nil {
+			v.PlayingRadios++
+			for _, station := range stations {
+				if station.ID == radio.Playing.StationID && (station.Favicon != "" || stationArtworkUUID(station) != "") {
+					radio.Image = "/stations/" + station.ID + "/artwork"
+					break
+				}
+			}
+		}
+		v.Radios = append(v.Radios, radio)
+	}
 	return nil
 }
 func (a *App) dashboardLive(w http.ResponseWriter, r *http.Request) {

@@ -62,7 +62,7 @@ func CandidateStation(c Candidate) Station {
 	if country == "" {
 		country = c.CountryCode
 	}
-	return Station{Name: c.Name, URL: raw, Homepage: c.Homepage, Country: country, Codec: c.Codec, Bitrate: c.Bitrate, HLS: c.HLS != 0, RBUUID: c.UUID, Source: "radio-browser", Tags: c.Tags, Language: c.Language}
+	return Station{Favicon: c.Favicon, Name: c.Name, URL: raw, Homepage: c.Homepage, Country: country, Codec: c.Codec, Bitrate: c.Bitrate, HLS: c.HLS != 0, RBUUID: c.UUID, Source: "radio-browser", Tags: c.Tags, Language: c.Language}
 }
 func GroupCandidates(items []Candidate) []Candidate {
 	out := []Candidate{}

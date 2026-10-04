@@ -120,7 +120,7 @@ func (s *Store) SaveStation(a model.Station) (model.Station, error) {
 		if a.Source != "custom" {
 			a.Name = model.ChannelName(a.Name)
 		}
-		_, e = tx.Exec(`INSERT INTO stations(id,name,url,stream_id,codec,bitrate,rb_uuid,source,country,tags,language,hls,homepage) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?,?,?,?,?)`, a.ID, a.Name, a.URL, a.StreamID, a.Codec, a.Bitrate, a.RBUUID, a.Source, a.Country, a.Tags, a.Language, a.HLS, a.Homepage)
+		_, e = tx.Exec(`INSERT INTO stations(id,name,url,stream_id,codec,bitrate,rb_uuid,source,country,tags,language,hls,homepage,favicon) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?,?,?,?,?,?)`, a.ID, a.Name, a.URL, a.StreamID, a.Codec, a.Bitrate, a.RBUUID, a.Source, a.Country, a.Tags, a.Language, a.HLS, a.Homepage, a.Favicon)
 	} else if a.Source == "custom" {
 		var oldURL string
 		e = tx.QueryRow(`SELECT url FROM stations WHERE id=? AND source='custom'`, a.ID).Scan(&oldURL)
@@ -139,6 +139,9 @@ func (s *Store) SaveStation(a model.Station) (model.Station, error) {
 		return a, e
 	}
 	if _, e = tx.Exec(`UPDATE stations SET homepage=? WHERE id=? AND homepage='' AND ?<>''`, a.Homepage, a.ID, a.Homepage); e != nil {
+		return a, e
+	}
+	if _, e = tx.Exec(`UPDATE stations SET favicon=? WHERE id=? AND favicon='' AND ?<>''`, a.Favicon, a.ID, a.Favicon); e != nil {
 		return a, e
 	}
 	if e = addVariant(tx, a); e != nil {

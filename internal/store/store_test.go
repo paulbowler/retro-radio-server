@@ -145,7 +145,7 @@ func TestUpgradeFromMilestone1PreservesRadioAndPreset(t *testing.T) {
 	}
 	var version int
 	s.DB.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version)
-	if version != 7 {
+	if version != 8 {
 		t.Fatal(version)
 	}
 }

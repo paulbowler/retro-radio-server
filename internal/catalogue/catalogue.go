@@ -270,3 +270,23 @@ func (s *Service) Resolve(ctx context.Context, id string) (model.Station, error)
 
 	return station, nil
 }
+
+// Artwork refreshes metadata independently of station admission or playback.
+func (s *Service) Artwork(ctx context.Context, id string) (string, error) {
+	if !uuid.MatchString(id) {
+		return "", errors.New("invalid station identifier")
+	}
+	key := "artwork:" + id
+	if payload, updated, err := s.Store.Cache(key); err == nil && time.Since(updated) < 24*time.Hour {
+		var items []model.Candidate
+		if json.Unmarshal(payload, &items) == nil && len(items) == 1 {
+			return items[0].Favicon, nil
+		}
+	}
+	items, err := s.fetch(ctx, "/json/stations/byuuid/"+id)
+	if err != nil || len(items) != 1 || items[0].UUID != id {
+		return "", errors.New("station artwork unavailable")
+	}
+	_ = s.Store.CachePut(key, items)
+	return items[0].Favicon, nil
+}

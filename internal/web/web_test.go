@@ -35,7 +35,7 @@ func TestDashboardAuthAndForms(t *testing.T) {
 	r.SetBasicAuth("admin", "testsecret")
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "● Ready") || !strings.Contains(w.Body.String(), "Your radios") || strings.Contains(w.Body.String(), "Find a station →") || strings.Contains(w.Body.String(), "Playback confirmed") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "No radios yet") || strings.Contains(w.Body.String(), "Find a station →") || strings.Contains(w.Body.String(), "Playback confirmed") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	d, e := s.Seen("fixture-token", "pure", "8", "192.168.1.100")

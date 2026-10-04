@@ -117,6 +117,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "navxml", "favxml", "afavxml", "search":
 		if (endpoint == "navxml" && (q.Get("gofile") == "Podcasts" || q.Get("podcast") != "")) || (endpoint == "search" && q.Get("sSearchtype") == "5") {
 			items, count, err = h.podcastItems(base, q)
+			for i := range items {
+				if items[i].EpisodeURL != "" {
+					items[i].EpisodeURL += "?radio=" + url.QueryEscape(d.ID)
+				}
+			}
 			break
 		}
 		var stations []model.Station
@@ -125,12 +130,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s, err = h.Store.Station(q.Get("Search"), false)
 			if err == nil {
 				var play string
-				health, _ := h.Store.Health(s.ID)
-				if len(s.Variants) > 1 {
-					play, s, err = delivery.RadioPlayURL(h.Base, s, d, h.Store.Preferred(d.ID, s.ID))
-				} else {
-					play, err = delivery.PlayURL(h.Base, s, d.Capabilities, health)
-				}
+				play, s, err = delivery.RadioPlayURL(h.Base, s, d, h.Store.Preferred(d.ID, s.ID))
 				if err == nil {
 					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(""), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
 					count = 1

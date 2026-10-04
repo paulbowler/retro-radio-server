@@ -171,6 +171,8 @@ func TestExpectedResponseFixtures(t *testing.T) {
 		want := strings.ReplaceAll(strings.TrimSpace(string(expected)), "{STREAM_ID}", station.StreamID)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", "/setupapp/pure/asp/BrowseXML/"+c.path, nil))
+		device, _ := h.Store.Seen("synthetic-fixture", "pure", "", "192.0.2.1")
+		want = strings.ReplaceAll(want, "{RADIO_ID}", device.ID)
 		if w.Body.String() != want {
 			t.Fatalf("response differs from %s\n%s", c.fixture, w.Body.String())
 		}

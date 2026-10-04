@@ -40,7 +40,7 @@ func (s *Store) migrate() error {
 	if err := s.DB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 7 {
+	if version > 8 {
 		return fmt.Errorf("database schema %d is newer than this server", version)
 	}
 	if version >= 1 {
@@ -59,7 +59,10 @@ func (s *Store) migrate() error {
 		if err := s.migrateV6(); err != nil {
 			return err
 		}
-		return s.migrateV7()
+		if err := s.migrateV7(); err != nil {
+			return err
+		}
+		return s.migrateV8()
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -100,10 +103,13 @@ func (s *Store) migrate() error {
 	if err := s.migrateV6(); err != nil {
 		return err
 	}
-	return s.migrateV7()
+	if err := s.migrateV7(); err != nil {
+		return err
+	}
+	return s.migrateV8()
 }
 func (s *Store) Stations(search string) ([]model.Station, error) {
-	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
+	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +117,7 @@ func (s *Store) Stations(search string) ([]model.Station, error) {
 	out := []model.Station{}
 	for rows.Next() {
 		var a model.Station
-		if err = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage); err != nil {
+		if err = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage, &a.Favicon); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
@@ -135,7 +141,7 @@ func (s *Store) Station(id string, stream bool) (model.Station, error) {
 	if stream {
 		col = "stream_id"
 	}
-	err := s.DB.QueryRow(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations WHERE `+col+`=?`, id).Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage)
+	err := s.DB.QueryRow(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations WHERE `+col+`=?`, id).Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage, &a.Favicon)
 	if err == sql.ErrNoRows {
 		var canonical string
 		aliasColumn := "old_id"
@@ -233,7 +239,7 @@ func (s *Store) Favourite(device, station string, on bool) error {
 	return err
 }
 func (s *Store) Favourites(device string) ([]model.Station, error) {
-	rows, e := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations JOIN favourites ON favourites.station_id=stations.id WHERE favourites.device_id=? ORDER BY name`, device)
+	rows, e := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations JOIN favourites ON favourites.station_id=stations.id WHERE favourites.device_id=? ORDER BY name`, device)
 	if e != nil {
 		return nil, e
 	}
@@ -241,7 +247,7 @@ func (s *Store) Favourites(device string) ([]model.Station, error) {
 	out := []model.Station{}
 	for rows.Next() {
 		var a model.Station
-		if e = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage); e != nil {
+		if e = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage, &a.Favicon); e != nil {
 			return nil, e
 		}
 		out = append(out, a)

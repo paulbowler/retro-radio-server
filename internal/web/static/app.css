@@ -43,3 +43,7 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 .station-player{display:block;width:100%;margin:16px 0}
 
 .podcast-episode-card>h3{margin:0;max-height:3.9em;overflow-y:auto;flex-shrink:0}.podcast-episode-card>.muted{margin:0;flex-shrink:0}.podcast-episode-card audio{margin:0;margin-top:auto;flex-shrink:0}
+
+.radio-overview{display:flex;flex-direction:column;gap:14px}.radio-overview h2,.radio-overview h3,.radio-overview p{margin:0}.radio-overview>.button{align-self:flex-start;margin-top:auto}.radio-favourite-count{color:#ff80bd;white-space:nowrap}.now-playing{display:flex;gap:16px;align-items:flex-start}.station-artwork{position:relative;flex:0 0 88px;width:88px;height:88px;border-radius:12px;overflow:hidden;background:rgba(0,255,255,.08);border:1px solid var(--green);display:grid;place-items:center;color:var(--green);font-size:36px}.station-artwork img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#181027}.now-playing-details{min-width:0;display:flex;flex-direction:column;gap:8px}.current-song{color:var(--green);overflow-wrap:anywhere}.feed-description{max-height:4.5em;overflow:auto}.audio-detail{font-size:12px}
+
+.station-artwork img[hidden]{display:none}.radio-overview .section-heading{flex-wrap:nowrap;align-items:flex-start}.radio-overview h2{min-width:0;overflow-wrap:anywhere}

@@ -128,6 +128,10 @@ func TestHTTPSICYChunkedStreamingAndCancellation(t *testing.T) {
 	if string(data) != string(payload) {
 		t.Fatal("ICY bytes modified")
 	}
+	active := p.Active()
+	if len(active) != 1 || active[0].Title != "x" {
+		t.Fatalf("song metadata not observed: %+v", active)
+	}
 	cancel()
 	res.Body.Close()
 	select {

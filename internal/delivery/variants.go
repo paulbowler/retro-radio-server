@@ -88,17 +88,13 @@ func RadioPlayURL(base string, s model.Station, d model.Device, preferred string
 	if err != nil {
 		return "", s, err
 	}
-	health := model.Health{}
-	for _, v := range s.Variants {
-		if v.ID == selected.VariantID {
-			health = v.Health
-			break
-		}
+	// Radios use the relay so playback can be observed even when the upstream
+	// could otherwise be played directly. The radio ID survives reverse proxies.
+	play := base + "/stream/" + s.StreamID + "?radio=" + url.QueryEscape(d.ID)
+	if len(s.Variants) > 1 {
+		play += "&device=" + url.QueryEscape(d.ID)
 	}
-	play, err := PlayURL(base, selected, d.Capabilities, health)
-	if err == nil && len(s.Variants) > 1 {
-		play += "?device=" + url.QueryEscape(d.ID)
-	}
+
 	return play, selected, err
 }
 func (p *Relay) probeChannel(ctx context.Context, s model.Station, persist bool) (model.Health, error) {
@@ -164,6 +160,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 			if value := r.Header.Get(header); value != "" {
 				req.Header.Set(header, value)
 			}
+		}
+		if s.ID != "" && r.Method == "GET" && r.Header.Get("Range") == "" {
+			req.Header.Set("Icy-MetaData", "1")
 		}
 		res, err := p.request(req)
 		h := model.Health{StationID: s.ID, VariantID: v.ID, Checked: time.Now().UTC(), Codec: v.Codec, Bitrate: v.Bitrate}
