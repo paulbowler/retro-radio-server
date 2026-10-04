@@ -10,6 +10,7 @@ import (
 	_ "image/png"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // ServeRadioArtwork is public like audio playback: legacy radios cannot supply
@@ -65,4 +66,30 @@ func radioJPEG(data []byte) ([]byte, error) {
 	var encoded bytes.Buffer
 	err = jpeg.Encode(&encoded, dst, &jpeg.Options{Quality: 85})
 	return encoded.Bytes(), err
+}
+
+const fallbackArtworkURL = "/static/retro-radio-logo.png"
+
+var fallbackRadioJPEG = sync.OnceValues(func() ([]byte, error) {
+	data, err := assets.ReadFile("static/retro-radio-logo.png")
+	if err != nil {
+		return nil, err
+	}
+	return radioJPEG(data)
+})
+
+func serveFallbackArtwork(w http.ResponseWriter, r *http.Request, radio bool) {
+	data, err := assets.ReadFile("static/retro-radio-logo.png")
+	kind := "image/png"
+	if radio {
+		data, err = fallbackRadioJPEG()
+		kind = "image/jpeg"
+	}
+	if err != nil {
+		http.Error(w, "artwork unavailable", http.StatusInternalServerError)
+		return
+	}
+	// Retry the station's own artwork soon, rather than caching a temporary outage.
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	writeArtwork(w, r, data, kind)
 }

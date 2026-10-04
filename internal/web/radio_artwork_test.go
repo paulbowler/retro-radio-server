@@ -103,7 +103,7 @@ func TestRadioArtworkPublicHTTPJPEGAndHEAD(t *testing.T) {
 	before := calls
 	w = httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/artwork/1001.jpg", nil))
-	if w.Code != 404 || calls != before {
+	if w.Code != 200 || w.Header().Get("Content-Type") != "image/jpeg" || calls != before {
 		t.Fatal("private artwork allowed", w.Code, calls)
 	}
 }
@@ -155,11 +155,97 @@ func TestCandidateArtworkAndCardPlaceholder(t *testing.T) {
 		if err = page.ExecuteTemplate(&html, "radio-station", card); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(html.String(), "station-thumb") || !strings.Contains(html.String(), "♫") || !strings.Contains(html.String(), ">Add</button>") {
+		if !strings.Contains(html.String(), "station-thumb") || !strings.Contains(html.String(), "retro-radio-logo.png") || !strings.Contains(html.String(), ">Add</button>") {
 			t.Fatal(html.String())
 		}
-		if strings.Contains(html.String(), "data-station-artwork") != hasImage {
+		if strings.Contains(html.String(), "/stations/candidate/"+uuid+"/artwork") != hasImage {
 			t.Fatal("incorrect image/placeholder", html.String())
 		}
+	}
+}
+
+func TestSharedArtworkFallback(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "fallback.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.DB.Close()
+	app := &App{Store: s, Relay: delivery.New(s)}
+	h := app.Handler()
+	original, err := assets.ReadFile("static/retro-radio-logo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	radioLogo, err := fallbackRadioJPEG()
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(radioLogo))
+	if err != nil || img.Bounds().Dx() != 128 || img.Bounds().Dy() != 128 {
+		t.Fatal("invalid radio logo", err)
+	}
+	for _, scenario := range []string{"missing", "private", "offline", "not-found", "invalid", "oversized", "unsupported"} {
+		t.Run(scenario, func(t *testing.T) {
+			favicon := "https://1.1.1.1/logo.png"
+			if scenario == "missing" {
+				favicon = ""
+			}
+			if scenario == "private" {
+				favicon = "http://127.0.0.1/logo.png"
+			}
+			// A custom station with no directory identity needs no external lookup.
+			_, err := s.DB.Exec(`UPDATE stations SET favicon=?, source='custom' WHERE id='1001'`, favicon)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			app.ArtworkClient = &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if scenario == "offline" {
+					return nil, io.ErrUnexpectedEOF
+				}
+				body := []byte("not an image")
+				status := http.StatusOK
+				if scenario == "not-found" {
+					status = 404
+				}
+				if scenario == "oversized" {
+					body = bytes.Repeat([]byte("x"), (1<<20)+1)
+				}
+				if scenario == "unsupported" {
+					body = []byte("<svg></svg>")
+				}
+				return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(body)), Request: r}, nil
+			})}
+			for _, radio := range []bool{false, true} {
+				path := "/stations/1001/artwork"
+				want, kind := original, "image/png"
+				if radio {
+					path = "/artwork/1001.jpg"
+					want, kind = radioLogo, "image/jpeg"
+				}
+				for _, method := range []string{"GET", "HEAD"} {
+					w := httptest.NewRecorder()
+					r := httptest.NewRequest(method, path, nil)
+					if radio {
+						app.ServeRadioArtwork(w, r)
+					} else {
+						h.ServeHTTP(w, r)
+					}
+					if w.Code != 200 || w.Header().Get("Content-Type") != kind || w.Header().Get("Content-Length") != strconv.Itoa(len(want)) || w.Header().Get("Cache-Control") != "private, max-age=300" {
+						t.Fatal(w.Code, w.Header())
+					}
+					if method == "GET" && !bytes.Equal(w.Body.Bytes(), want) {
+						t.Fatal("incorrect fallback")
+					}
+					if method == "HEAD" && w.Body.Len() != 0 {
+						t.Fatal("HEAD returned body")
+					}
+				}
+			}
+			if (scenario == "missing" || scenario == "private") && calls != 0 {
+				t.Fatal("unexpected upstream request", calls)
+			}
+		})
 	}
 }

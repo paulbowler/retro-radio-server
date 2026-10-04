@@ -49,3 +49,5 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 .station-artwork img[hidden]{display:none}.radio-overview .section-heading{flex-wrap:nowrap;align-items:flex-start}.radio-overview h2{min-width:0;overflow-wrap:anywhere}
 
 .station-title{display:flex;gap:12px;min-width:0;align-items:flex-start}.station-title h3{flex:1}.station-artwork.station-thumb{flex:0 0 48px;width:48px;height:48px;border-radius:8px;font-size:24px}
+
+.brand{display:flex;align-items:center;gap:9px;font-size:16px;letter-spacing:.06em}.brand img{flex:none;border-radius:6px}.station-artwork .artwork-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}

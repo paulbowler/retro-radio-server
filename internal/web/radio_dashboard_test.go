@@ -60,7 +60,11 @@ func TestRadioDashboardFavouritesLastContactAndLiveRefresh(t *testing.T) {
 	for _, path := range []string{"/stations/unknown/artwork?url=http://127.0.0.1", "/stations/1001/artwork"} {
 		w = httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
-		if w.Code != http.StatusNotFound {
+		want := http.StatusNotFound
+		if path == "/stations/1001/artwork" {
+			want = http.StatusOK
+		}
+		if w.Code != want {
 			t.Fatal(path, w.Code)
 		}
 	}

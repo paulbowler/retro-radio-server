@@ -64,7 +64,7 @@ func (a *App) serveArtwork(w http.ResponseWriter, r *http.Request, s model.Stati
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", s.Favicon, nil)
 	if err != nil || delivery.ValidateURL(s.Favicon) != nil {
-		http.NotFound(w, r)
+		serveFallbackArtwork(w, r, radio)
 		return
 	}
 	client := a.ArtworkClient
@@ -86,38 +86,44 @@ func (a *App) serveArtwork(w http.ResponseWriter, r *http.Request, s model.Stati
 		res, err = client.Do(req)
 	}
 	if err != nil {
-		http.NotFound(w, r)
+		serveFallbackArtwork(w, r, radio)
 		return
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		http.NotFound(w, r)
+		serveFallbackArtwork(w, r, radio)
 		return
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
 	if err != nil || len(data) > 1<<20 {
-		http.NotFound(w, r)
+		serveFallbackArtwork(w, r, radio)
 		return
 	}
 	kind := http.DetectContentType(data)
 	switch kind {
 	case "image/png", "image/jpeg", "image/gif", "image/webp", "image/x-icon", "image/vnd.microsoft.icon":
 	default:
-		http.NotFound(w, r)
+		serveFallbackArtwork(w, r, radio)
 		return
 	}
 	if radio {
 		data, err = radioJPEG(data)
 		if err != nil {
-			http.NotFound(w, r)
+			serveFallbackArtwork(w, r, radio)
 			return
 		}
 		kind = "image/jpeg"
 	}
+	writeArtwork(w, r, data, kind)
+}
+
+func writeArtwork(w http.ResponseWriter, r *http.Request, data []byte, kind string) {
 	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 	w.Header().Set("Content-Type", kind)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if w.Header().Get("Cache-Control") == "" {
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+	}
 	if r.Method != "HEAD" {
 		w.Write(data)
 	}
@@ -130,5 +136,5 @@ func stationArtworkURL(c card) string {
 	if c.Station.Favicon != "" && c.Station.RBUUID != "" {
 		return "/stations/candidate/" + c.Station.RBUUID + "/artwork"
 	}
-	return ""
+	return fallbackArtworkURL
 }
