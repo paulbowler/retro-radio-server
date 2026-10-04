@@ -29,7 +29,6 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 
 .pagination{align-items:center;justify-content:space-between;flex-wrap:wrap;flex-direction:row}.pagination a{font-weight:550}.pagination span{font-size:13px}.pagination button:disabled{opacity:.4;cursor:default;box-shadow:none}
 
-.audio-options{margin-top:16px;font-size:13px}.audio-options summary{color:var(--cyan);cursor:pointer}.audio-options form{margin-top:12px}.audio-options ul{padding-left:20px;color:var(--muted)}
 
 .rename-modal label{display:block;margin:20px 0 8px}.rename-modal input[name="name"]{width:100%}.rename-modal .modal-actions{margin-top:24px}.rename-modal .rename-error{color:#ff9fc9;margin-bottom:0}.rename-modal [hidden]{display:none}
 

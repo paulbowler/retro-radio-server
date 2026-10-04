@@ -58,7 +58,7 @@ func TestChannelAdmissionTestsAlternativesAndKeepsOneRadioFavourite(t *testing.T
 	r.Header.Set("HX-Request", "true")
 	w := httptest.NewRecorder()
 	app.Handler().ServeHTTP(w, r)
-	if w.Code != 200 || s.Preferred(device.ID, saved.ID) != selected || !strings.Contains(w.Body.String(), `selected>Stream `) {
+	if w.Code != 200 || s.Preferred(device.ID, saved.ID) != selected || strings.Contains(w.Body.String(), `Audio options`) || strings.Contains(w.Body.String(), `name="variant"`) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	f, _ := s.Favourites(device.ID)
