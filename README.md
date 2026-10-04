@@ -96,6 +96,12 @@ The database lives in a persistent Docker volume. Keep that volume when rebuildi
 
 This is a **trusted home-network service**. Management Basic authentication uses HTTP unless you provide a TLS terminator or VPN. Radio endpoints cannot require management credentials. Keep the radio’s HTTP access available and do not expose the service as a public internet proxy. Local `.env` files, databases and backups are excluded from Git.
 
+## Add Retro Radio to your Home Screen
+
+After updating the server, open its HTTPS web address in Safari on iPhone or iPad, choose Share → Add to Home Screen, then Add. The suggested name is **Retro Radio**, with the neon radio logo. Enable **Open as Web App** if Safari offers that option. Android and desktop browsers can use their Install app or Add to Home Screen option where available.
+
+The installed app opens on the dashboard in its own window. Existing Home Screen shortcuts may keep their old name or icon; remove and add the shortcut again to refresh them. The app still needs a connection to your Retro Radio server and the broadcaster. Only public app branding and installation metadata are available without management credentials; management pages keep their existing login settings.
+
 ## App settings
 
 The cog in the header opens shared settings for every radio. The logo returns to the dashboard.

@@ -268,6 +268,10 @@ func (a *App) Handler() http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Vary", "HX-Request, HX-History-Restore-Request")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'")
+		if asset, ok := publicAppAssets[r.URL.Path]; ok && (r.Method == "GET" || r.Method == "HEAD") {
+			serveAppAsset(w, r, asset)
+			return
+		}
 		if a.Password != "" {
 			u, p, ok := r.BasicAuth()
 			gotU, wantU := sha256.Sum256([]byte(u)), sha256.Sum256([]byte(a.User))
