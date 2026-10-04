@@ -68,6 +68,7 @@ func main() {
 	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base})
 	mux.Handle("/stream/", relay)
 	mux.HandleFunc("/episode/", relay.ServeEpisode)
+	mux.HandleFunc("/artwork/", app.ServeRadioArtwork)
 	mux.Handle("/", app.Handler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)

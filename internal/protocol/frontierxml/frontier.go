@@ -132,7 +132,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				var play string
 				play, s, err = delivery.RadioPlayURL(h.Base, s, d, h.Store.Preferred(d.ID, s.ID))
 				if err == nil {
-					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(""), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
+					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(h.Base + "/artwork/" + s.ID + ".jpg"), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
 					count = 1
 					h.Store.Log(d.ID, "Station lookup", s.Name)
 					if strings.HasPrefix(play, h.Base+"/stream/") {

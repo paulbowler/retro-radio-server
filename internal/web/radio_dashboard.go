@@ -33,6 +33,9 @@ func listeningDuration(t time.Time) string {
 // Artwork is addressed by a saved station ID, never an arbitrary URL. The
 // delivery client pins checked public addresses and validates every redirect.
 func (a *App) stationArtwork(w http.ResponseWriter, r *http.Request) {
+	a.serveStationArtwork(w, r, false)
+}
+func (a *App) serveStationArtwork(w http.ResponseWriter, r *http.Request, radio bool) {
 	s, err := a.Store.Station(r.PathValue("station"), false)
 	if err != nil {
 		http.NotFound(w, r)
@@ -51,7 +54,11 @@ func (a *App) stationArtwork(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	res, err := a.ArtworkClient.Do(req)
+	client := a.ArtworkClient
+	if client == nil {
+		client = delivery.NewClient()
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -73,10 +80,21 @@ func (a *App) stationArtwork(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if radio {
+		data, err = radioJPEG(data)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		kind = "image/jpeg"
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 	w.Header().Set("Content-Type", kind)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
-	w.Write(data)
+	if r.Method != "HEAD" {
+		w.Write(data)
+	}
 }
 
 func stationArtworkUUID(s model.Station) string {
