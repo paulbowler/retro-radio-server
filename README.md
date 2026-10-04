@@ -53,7 +53,7 @@ Open Internet Radio on the radio. It should appear under **Radios**. Only overri
 ### Find stations and choose favourites
 
 1. Open **Stations → Discover**. Browse popular stations or combine name, country and genre filters.
-2. Choose **Add to library**. The server must receive playable audio before saving the station; a popup reports success or failure.
+2. Use a station’s player to listen in your browser, then choose **Add to library**. The server must receive playable audio before saving the station; a popup reports success or failure.
 3. Every saved station is available on all current and future radios.
 4. Open **Radios → Manage favourites** and use the hearts to choose favourites for that radio.
 5. Use the radio’s **All stations**, **By country**, **By genre** or **Favourites** menus to listen.
@@ -64,7 +64,7 @@ Country suggestions use browser regional settings, with a remembered manual choi
 
 ### Listen to podcasts
 
-1. Open **Podcasts**, search by name and choose **Add podcast**. Alternatively, choose **Add by feed link** and paste a public podcast RSS or Atom link.
+1. Open **Podcasts**, search by name and choose **Add podcast**. You stay on the list with your search intact, ready to add another. Alternatively, choose **Add by feed link** and paste a public podcast RSS or Atom link.
 2. Open **Podcasts** in your radio’s Internet Radio menu, choose a show and then an episode. Refresh the radio’s directory if the new menu is not visible yet.
 3. The web interface also lets you browse episodes and listen in your browser. Lists show 24 episodes per page, newest first.
 

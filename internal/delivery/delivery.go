@@ -218,7 +218,7 @@ func (p *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p.serveAudio(w, r, s)
+	p.ServeAudio(w, r, s)
 }
 
 // ServeEpisode uses the same checked transport and byte-range relay as live radio.
@@ -233,9 +233,11 @@ func (p *Relay) ServeEpisode(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p.serveAudio(w, r, model.Station{Name: ep.Title, URL: ep.URL, Codec: ep.Codec})
+	p.ServeAudio(w, r, model.Station{Name: ep.Title, URL: ep.URL, Codec: ep.Codec})
 }
-func (p *Relay) serveAudio(w http.ResponseWriter, r *http.Request, s model.Station) {
+
+// ServeAudio relays a trusted catalogue record using checked upstream connections.
+func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Station) {
 	if err := ValidateURL(s.URL); err != nil {
 		http.Error(w, "unsafe upstream", 502)
 		return

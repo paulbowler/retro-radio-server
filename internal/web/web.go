@@ -27,6 +27,7 @@ import (
 //go:embed dashboard.html static/*
 var assets embed.FS
 var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
+	"stationListenURL":     stationListenURL,
 	"podcastDuration":      podcastDuration,
 	"addOne":               func(n int) int { return n + 1 },
 	"countryFlag":          countryFlag,
@@ -182,6 +183,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /", a.screen)
 	mux.HandleFunc("GET /stations/results", a.search)
 	mux.HandleFunc("GET /stations/card", a.refreshCard)
+	mux.HandleFunc("GET /stations/listen", a.listenCandidate)
 	mux.HandleFunc("GET /activity/live", a.activity)
 	mux.HandleFunc("GET /dashboard/live", a.dashboardLive)
 	mux.HandleFunc("GET /dashboard/discoveries", a.discoveries)

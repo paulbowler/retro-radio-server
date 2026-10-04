@@ -88,7 +88,10 @@ func (a *App) subscribePodcast(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	target := "/podcasts?podcast=" + url.QueryEscape(p.ID)
+	target := "/podcasts"
+	if query := strings.TrimSpace(r.Form.Get("q")); query != "" && len(query) <= 120 {
+		target += "?q=" + url.QueryEscape(query)
+	}
 	if partial(r) {
 		w.Header().Set("HX-Location", `{"path":"`+target+`","target":"#content"}`)
 		actionResult(w, true, "Podcast added", p.Title+" is available in the Podcasts menu on all your radios.")

@@ -128,7 +128,7 @@
  });
 })();
 
-// Keep browser listening to one episode at a time.
+// Keep browser listening to one station or episode at a time.
 document.addEventListener("play", event => {
  if (!(event.target instanceof HTMLAudioElement)) return;
  for (const player of document.querySelectorAll("audio")) if (player !== event.target) player.pause();
@@ -143,6 +143,7 @@ document.addEventListener("play", event => {
  const busy = () => form.classList.contains("htmx-request");
  document.addEventListener("click", event => {
   if (event.target.closest("[data-add-podcast-feed]")) {
+   form.elements.q.value = document.getElementById("podcast-query")?.value || "";
    dialog.showModal();
    link.focus();
   }
@@ -162,3 +163,8 @@ document.addEventListener("play", event => {
   if (dialog.open && !busy()) dialog.close();
  });
 })();
+
+// Pausing live radio releases the connection instead of buffering it indefinitely.
+document.addEventListener("pause", event => {
+ if (event.target instanceof HTMLAudioElement && event.target.matches(".station-player") && event.target.readyState > 0) event.target.load();
+}, true);

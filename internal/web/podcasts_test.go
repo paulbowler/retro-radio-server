@@ -68,8 +68,12 @@ func TestPodcastWebJourney(t *testing.T) {
 		t.Fatal("cross-origin subscription accepted")
 	}
 	w = request("POST", "/podcasts/subscribe", body, true, "http://radio.local")
-	if w.Code != 200 || !strings.Contains(w.Header().Get("HX-Trigger"), "Podcast added") || !strings.Contains(w.Header().Get("HX-Location"), "/podcasts?podcast=P") {
+	if w.Code != 200 || !strings.Contains(w.Header().Get("HX-Trigger"), "Podcast added") || !strings.Contains(w.Header().Get("HX-Location"), `"path":"/podcasts"`) {
 		t.Fatal(w.Code, w.Header(), w.Body.String())
+	}
+	w = request("POST", "/podcasts/subscribe", body+"&q=example", true, "http://radio.local")
+	if w.Code != 200 || !strings.Contains(w.Header().Get("HX-Location"), "/podcasts?q=example") {
+		t.Fatal("search lost after addition", w.Header())
 	}
 	all, _ := s.Podcasts()
 	id := all[0].ID

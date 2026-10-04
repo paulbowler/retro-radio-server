@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const maxFeed = 4 << 20
+const maxFeed = 8 << 20
 
 type Result struct {
 	Title      string `json:"collectionName"`
