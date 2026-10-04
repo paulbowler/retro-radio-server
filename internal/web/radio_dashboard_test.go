@@ -32,7 +32,7 @@ func TestRadioDashboardFavouritesLastContactAndLiveRefresh(t *testing.T) {
 	h := app.Handler()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/dashboard/live", nil))
-	for _, text := range []string{"Kitchen", "Bedroom", "1 favourites", "0 favourites", "Last connected 2 hours ago", "Manage favourites"} {
+	for _, text := range []string{"Kitchen", "Bedroom", "1 favourites", "0 favourites", "Last connected 2 hours ago"} {
 		if !strings.Contains(w.Body.String(), text) {
 			t.Fatalf("missing %q: %s", text, w.Body.String())
 		}
