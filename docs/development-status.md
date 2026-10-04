@@ -12,7 +12,8 @@ Updated 4 October 2026.
 - Progressive discovery of 24 usable popular stations per page in the selected country, with pagination above and below discovery, search and library lists.
 - Custom station creation and editing with automatic audio detection and checks before saving.
 - HTTP/HTTPS negotiation and checked audio relays, plus FFmpeg conversion of HLS/DASH to MP3.
-- An HTMX interface with Dashboard, Stations, Radios, Activity and Help; plain-language feedback and styled confirmations.
+- Podcast discovery, shared RSS/Atom subscriptions, hourly refresh, stable episode IDs, browser previews and Frontier on-demand menus.
+- An HTMX interface with Dashboard, Stations, Podcasts, Radios, Activity and Help; plain-language feedback and styled confirmations.
 - Docker deployment with a persistent data volume and management authentication.
 
 ## Verification
@@ -23,13 +24,14 @@ Automated coverage includes protocol fixtures, database migration and stable ide
 
 Local Go tests, race checks, vet and Linux amd64/arm64 builds have passed during development. Generated HLS/DASH conversion tests run when FFmpeg is installed. Live BBC HLS audio has been received and converted by the server; no physical-radio BBC result is claimed.
 
-The Docker image has been built and the local service upgraded repeatedly while preserving its volume. Browser walkthroughs covered navigation, discovery and filtering, library management, radio favourites, custom forms, listening activity, help, confirmation cancellation and unsuccessful additions. Synthetic save/delete tests use disposable databases.
+The Docker image has been built and the local service upgraded repeatedly while preserving its volume. Browser walkthroughs covered navigation, discovery and filtering, library management, radio favourites, custom forms, listening activity, help, confirmation cancellation and unsuccessful additions. Synthetic save/delete tests use disposable databases. BBC “More or Less” discovery, subscription, episode browsing and browser audio delivery were verified on an isolated server. Podcast radio menus, persistence, feed failures, unsafe links and byte-range playback have automated coverage.
 
 ## Still open
 
 - Broader physical-radio acceptance: navigation, reconnects, power-cycle persistence and additional models.
 - Redacted complete Pure protocol captures; existing fixtures remain reference-derived.
-- Podcasts, scheduled background health checks and additional directory-protocol adapters.
+- Physical-radio podcast acceptance, M4A/MP4 podcast support and listening-position sync.
+- Scheduled background station health checks and additional directory-protocol adapters.
 - Physical-radio acceptance of all adaptive-stream variants and broadcaster geographic restrictions.
 
 Streams and public directory entries can change. A passing server probe is not evidence of audible playback on every radio.

@@ -145,7 +145,7 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		}
 		chosen := v.Station(s)
 		if kind := adaptiveKind(chosen.URL, "", chosen.HLS); kind != "" {
-			h, err := p.check(r.Context(), chosen, true)
+			h, err := p.check(r.Context(), chosen, s.ID != "")
 			if err == nil && h.Working {
 				return chosen, nil, kind, nil
 			}
@@ -170,7 +170,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		if err != nil {
 			last = err
 			h.Message = "Connection failed"
-			_ = p.Store.SaveHealth(h)
+			if s.ID != "" {
+				_ = p.Store.SaveHealth(h)
+			}
 			continue
 		}
 		h.Status = res.StatusCode
@@ -181,7 +183,7 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		if kind := adaptiveKind(h.FinalURL, ct, chosen.HLS); kind != "" {
 			res.Body.Close()
 			chosen.HLS = true
-			health, e := p.check(r.Context(), chosen, true)
+			health, e := p.check(r.Context(), chosen, s.ID != "")
 			if e == nil && health.Working {
 				return chosen, nil, kind, nil
 			}
@@ -193,7 +195,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		if (res.StatusCode != 200 && res.StatusCode != 206 && res.StatusCode != 416) || (res.StatusCode != 416 && !audioContent(ct)) {
 			res.Body.Close()
 			h.Message = "Stream unavailable"
-			_ = p.Store.SaveHealth(h)
+			if s.ID != "" {
+				_ = p.Store.SaveHealth(h)
+			}
 			last = errors.New(h.Message)
 			continue
 		}
@@ -211,7 +215,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		if res.StatusCode != 416 && !supported(actual, caps) {
 			res.Body.Close()
 			h.Message = "Audio format changed"
-			_ = p.Store.SaveHealth(h)
+			if s.ID != "" {
+				_ = p.Store.SaveHealth(h)
+			}
 			last = errors.New(h.Message)
 			continue
 		}
@@ -224,7 +230,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 			if n == 0 || e != nil && e != io.ErrUnexpectedEOF && e != io.EOF {
 				res.Body.Close()
 				h.Message = "No audio received"
-				_ = p.Store.SaveHealth(h)
+				if s.ID != "" {
+					_ = p.Store.SaveHealth(h)
+				}
 				last = errors.New(h.Message)
 				continue
 			}
@@ -233,7 +241,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		h.Working = true
 		h.LastSuccess = h.Checked
 		h.Message = "Audio received"
-		_ = p.Store.SaveHealth(h)
+		if s.ID != "" {
+			_ = p.Store.SaveHealth(h)
+		}
 		return chosen, res, "", nil
 	}
 	return s, nil, "", last

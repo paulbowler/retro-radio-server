@@ -34,7 +34,7 @@ All XML responses have explicit **byte** Content-Length and no-store. Manufactur
 
 The root advertises a Search item with `SearchURL` ending `?sSearchtype=1` and the documented SearchButtonGo/Cancel/Textbox fields. Submitted `Search` is matched against the local station name. Search-type differences exist in prior art (LibreFrontier uses type 2); non-type-3 requests here use the local search path. The exact Pure search submission requires confirmation.
 
-`FavXML.asp` and `AFavXML.asp` return this radio's stored favourites. The UI provides reliable add/remove actions. `AddFav.asp` and `RemoveFavs.asp` accept station ID variants (`ID`, `StationId`, `stationid`, `Search`), but these mutation parameter variants are **provisional**, not verified Pure captures. Radio-side bookmarking is not part of milestone acceptance. No podcast IDs or global favourites groups are implemented.
+`FavXML.asp` and `AFavXML.asp` return this radio's stored favourites. The UI provides reliable add/remove actions. `AddFav.asp` and `RemoveFavs.asp` accept station ID variants (`ID`, `StationId`, `stationid`, `Search`), but these mutation parameter variants are **provisional**, not verified Pure captures. Radio-side bookmarking is not part of milestone acceptance. Podcast bookmarking and global favourites groups are not implemented.
 
 ## Remaining hardware uncertainties
 
@@ -48,6 +48,12 @@ The existing Smooth URL from original presets may bypass directory lookup; the u
 
 ## Milestone 2 catalogue behaviour
 
-The established challenge and root shapes are unchanged. Saved Radio-Browser/custom stations now share the normalised catalogue. Imported upstream UUIDs map to stable, short numeric Frontier IDs. Favourites remain per radio and persist across migration/restart. Directory responses include only codecs/adaptive formats compatible with that radio's stored profile, avoiding entries it cannot play. The full lookup uses each station's name/country/codec/bitrate and the shared delivery engine; Smooth's existing response fixture is preserved.
+The established challenge is unchanged; the root now includes a Podcasts directory. Saved Radio-Browser/custom stations now share the normalised catalogue. Imported upstream UUIDs map to stable, short numeric Frontier IDs. Favourites remain per radio and persist across migration/restart. Directory responses include only codecs/adaptive formats compatible with that radio's stored profile, avoiding entries it cannot play. The full lookup uses each station's name/country/codec/bitrate and the shared delivery engine; Smooth's existing response fixture is preserved.
 
 The radio's search menu searches stations assigned to that device. Public Radio-Browser discovery is a web workflow: search, select for an automatic stream check, then add to a radio with an optional favourite heart. My stations lists that radio's assignments, while Favourites lists its heart-marked subset. No speculative new manufacturer endpoint or JSON protocol is introduced. A fresh successful check can enable direct HTTP playback when the exact final URL is unchanged and remains HTTP; otherwise a legacy profile receives the local HTTP relay. Playlist responses are rejected by the relay.
+
+## Podcast menus
+
+The shared subscription library appears at `navXML.asp?gofile=Podcasts`. Shows use `ShowOnDemand`, including `ShowOnDemandID`, `ShowOnDemandName`, `ShowOnDemandURL` and its backup. Opening `navXML.asp?podcast=P<number>` returns `ShowEpisode` entries. Full episode lookup uses `Search.asp?sSearchtype=5&Search=P<number>X<episode-number>` and returns the show/title/description/format and an HTTP `ShowEpisodeURL` through `/episode/<id>`.
+
+Show and episode IDs are short, monotonically allocated and stable across refreshes. Publisher GUIDs (or enclosure URLs when GUIDs are missing) identify existing episodes. Pagination uses the same one-based inclusive bounds and full ItemCount as station lists. The wire names and type-5 lookup come from [WiFi-RadioAPI’s on-demand documentation](https://github.com/kimbtech/WiFi-RadioAPI/blob/master/HamaAPI.md); fixtures and automated journeys verify our implementation. These are reference-derived responses, not captured Pure podcast transactions, and hardware acceptance remains open.

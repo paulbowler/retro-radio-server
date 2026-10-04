@@ -7,6 +7,9 @@ JSON endpoints use optional management Basic authentication when `RETRO_ADMIN_PA
 | `GET /healthz` | — | Plain `ok`; DB reachability only; no auth |
 | `GET /api/v1/devices` | — | Registered devices/capabilities/last seen |
 | `GET /api/v1/stations` | `q` optional | Local station metadata; no upstream URLs |
+| `GET /api/v1/podcasts` | — | Shared subscriptions, metadata and episode counts; no feed URLs |
+| `GET /api/v1/episodes` | `podcast=P<number>` | Episode IDs, titles, dates, durations and formats; no upstream URLs |
+| `GET /episode/<episode-id>` | Optional HTTP Range; HEAD also supported | Relayed episode audio; no management auth |
 | `GET /api/v1/favourites` | `device=<device-id>` | That device's favourites |
 | `GET /api/v1/play` | `device=<device-id>&station=1001` | `{"url":"http://.../stream/<opaque-id>"}` for legacy profile |
 | `GET /api/v1/streams` | — | Currently connected relays, station name and start time |
@@ -30,3 +33,5 @@ A straightforward supported fallback is to save the managed Smooth station as a 
 - `GET /api/v1/play` applies recent stored health and the target radio's profile. Unsupported codec/adaptive streams return 422. Legacy HTTPS stations use HTTP relay URLs.
 - The browser-facing routes `/stations/results`, `/stations/card`, `/stations/select`, `/devices/stations`, `/stations/check` and `/custom` are HTML fragment/form endpoints, not a versioned REST contract. Search terms go to Radio-Browser; device identifiers do not.
 - Activity checks are on demand, and a connected stream is still not proof of audible playback. No scheduler/MQTT/FSAPI control dependency was added.
+
+Podcast episode IDs remain stable across feed refreshes. Their playback URL is the configured public HTTP origin plus `/episode/<id>`. Subscription removal invalidates its episode URLs. Podcasts are shared by all radios; no podcast favourite or resume-position API is implemented.

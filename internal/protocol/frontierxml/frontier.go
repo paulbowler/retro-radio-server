@@ -24,6 +24,18 @@ var route = regexp.MustCompile(`(?i)^/setupapp/([a-z0-9_-]+)/asp/browsexml/([a-z
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]{8,128}$`)
 
 type Item struct {
+	ShowID      string `xml:"ShowOnDemandID,omitempty"`
+	ShowTitle   string `xml:"ShowOnDemandName,omitempty"`
+	ShowURL     string `xml:"ShowOnDemandURL,omitempty"`
+	ShowBackup  string `xml:"ShowOnDemandURLBackUp,omitempty"`
+	EpisodeID   string `xml:"ShowEpisodeID,omitempty"`
+	ShowName    string `xml:"ShowName,omitempty"`
+	EpisodeName string `xml:"ShowEpisodeName,omitempty"`
+	EpisodeURL  string `xml:"ShowEpisodeURL,omitempty"`
+	ShowDesc    string `xml:"ShowDesc,omitempty"`
+	ShowMime    string `xml:"ShowMime,omitempty"`
+	ShowFormat  string `xml:"ShowFormat,omitempty"`
+
 	Type           string  `xml:"ItemType"`
 	Title          string  `xml:"Title,omitempty"`
 	Dir            string  `xml:"UrlDir,omitempty"`
@@ -100,9 +112,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dir := func(title, link string) Item { return Item{Type: "Dir", Title: title, Dir: link, Backup: link} }
 	switch endpoint {
 	case "loginxml":
-		items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
-		count = 5
+		items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), dir("Podcasts", base+"navXML.asp?gofile=Podcasts"), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
+		count = 6
 	case "navxml", "favxml", "afavxml", "search":
+		if (endpoint == "navxml" && (q.Get("gofile") == "Podcasts" || q.Get("podcast") != "")) || (endpoint == "search" && q.Get("sSearchtype") == "5") {
+			items, count, err = h.podcastItems(base, q)
+			break
+		}
 		var stations []model.Station
 		if endpoint == "search" && q.Get("sSearchtype") == "3" {
 			var s model.Station

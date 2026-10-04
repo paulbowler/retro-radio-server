@@ -15,6 +15,7 @@ import (
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/model"
+	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/store"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ import (
 //go:embed dashboard.html static/*
 var assets embed.FS
 var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
+	"podcastDuration":      podcastDuration,
 	"addOne":               func(n int) int { return n + 1 },
 	"countryFlag":          countryFlag,
 	"countryName":          countryName,
@@ -45,6 +47,7 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 type App struct {
 	enrichmentMu         sync.Mutex
 	enrichmentAt         map[string]time.Time
+	Podcasts             *podcast.Service
 	Store                *store.Store
 	Relay                *delivery.Relay
 	Catalogue            *catalogue.Service
@@ -113,6 +116,10 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
+	Podcasts                                    []model.Podcast
+	Podcast                                     *model.Podcast
+	Episodes                                    []model.Episode
+	PodcastResults                              []podcast.Result
 	Page, Title, Base, Selected, Query, Message string
 	Devices                                     []model.Device
 	Cards                                       []card
@@ -138,7 +145,7 @@ type view struct {
 	AutoCheck                                   bool
 }
 
-var sections = map[string]string{"/": "Dashboard", "/stations": "Stations", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
+var sections = map[string]string{"/": "Dashboard", "/stations": "Stations", "/podcasts": "Podcasts", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
 
 func partial(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-History-Restore-Request") != "true"
@@ -167,6 +174,9 @@ func (a *App) Handler() http.Handler {
 	if a.Catalogue == nil {
 		a.Catalogue = catalogue.New(a.Store)
 	}
+	if a.Podcasts == nil {
+		a.Podcasts = podcast.New(a.Store)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /", a.screen)
@@ -177,6 +187,13 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /dashboard/discoveries", a.discoveries)
 	mux.HandleFunc("GET /stations/discoveries", a.discoveries)
 	mux.HandleFunc("POST /devices/rename", a.rename)
+	mux.HandleFunc("POST /podcasts/subscribe", a.subscribePodcast)
+	mux.HandleFunc("POST /podcasts/remove", a.removePodcast)
+	mux.HandleFunc("GET /api/v1/podcasts", func(w http.ResponseWriter, r *http.Request) { v, e := a.Store.Podcasts(); respond(w, v, e) })
+	mux.HandleFunc("GET /api/v1/episodes", func(w http.ResponseWriter, r *http.Request) {
+		v, e := a.Store.Episodes(r.URL.Query().Get("podcast"))
+		respond(w, v, e)
+	})
 
 	mux.HandleFunc("POST /stations/select", a.selectStation)
 	mux.HandleFunc("POST /stations/remove", a.removeStation)
@@ -324,6 +341,8 @@ func (a *App) screen(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Couldn’t load the overview. Please try again.", 503)
 			return
 		}
+	case "/podcasts":
+		a.podcastView(r, &v)
 	case "/custom":
 		stations, e := a.Store.Stations("")
 		if e != nil {

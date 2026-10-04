@@ -218,7 +218,25 @@ func (p *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err = ValidateURL(s.URL); err != nil {
+	p.serveAudio(w, r, s)
+}
+
+// ServeEpisode uses the same checked transport and byte-range relay as live radio.
+func (p *Relay) ServeEpisode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" && r.Method != "HEAD" {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+	ep, err := p.Store.Episode(strings.TrimPrefix(r.URL.Path, "/episode/"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	p.serveAudio(w, r, model.Station{Name: ep.Title, URL: ep.URL, Codec: ep.Codec})
+}
+func (p *Relay) serveAudio(w http.ResponseWriter, r *http.Request, s model.Station) {
+	if err := ValidateURL(s.URL); err != nil {
 		http.Error(w, "unsafe upstream", 502)
 		return
 	}
@@ -272,10 +290,10 @@ func (p *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		n, readErr := res.Body.Read(buf)
 		if n > 0 {
 			_ = rc.SetWriteDeadline(time.Now().Add(15 * time.Second))
-			if _, err = w.Write(buf[:n]); err != nil {
+			if _, err := w.Write(buf[:n]); err != nil {
 				return
 			}
-			if err = rc.Flush(); err != nil {
+			if err := rc.Flush(); err != nil {
 				return
 			}
 		}

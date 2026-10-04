@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/protocol/frontierxml"
 	"retroradio.local/server/internal/store"
 	"retroradio.local/server/internal/web"
@@ -61,10 +62,12 @@ func main() {
 		}
 		cat.Mirrors = []string{mirror}
 	}
-	app := &web.App{Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
+	podcasts := podcast.New(s)
+	app := &web.App{Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
 	mux := http.NewServeMux()
 	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base})
 	mux.Handle("/stream/", relay)
+	mux.HandleFunc("/episode/", relay.ServeEpisode)
 	mux.Handle("/", app.Handler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -79,6 +82,7 @@ func main() {
 	srv := &http.Server{Addr: env("RETRO_LISTEN", ":8080"), Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go podcasts.Run(ctx)
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)

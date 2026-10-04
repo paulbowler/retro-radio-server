@@ -1,9 +1,9 @@
 [
  {"name":"challenge","path":"/setupapp/pure/asp/BrowseXML/loginXML.asp?token=0","count":-2},
- {"name":"root","path":"/setupapp/pure/asp/BrowseXML/loginXML.asp?gofile=&mac=0123456789abcdef0123456789abcdef&dlang=eng&fver=8&ven=pure","count":5},
+ {"name":"root","path":"/setupapp/pure/asp/BrowseXML/loginXML.asp?gofile=&mac=0123456789abcdef0123456789abcdef&dlang=eng&fver=8&ven=pure","count":6},
  {"name":"station_list","path":"/setupapp/pure/asp/BrowseXML/navXML.asp?gofile=Radio&mac=0123456789abcdef0123456789abcdef&startItems=1&endItems=100","count":1},
  {"name":"station_lookup","path":"/setupapp/pure/asp/BrowseXML/Search.asp?sSearchtype=3&Search=1001&mac=0123456789abcdef0123456789abcdef","count":1},
- {"name":"case_variant","path":"/setupapp/pure/asp/browsexml/loginXML.asp?gofile=&mac=0123456789abcdef0123456789abcdef","count":5},
+ {"name":"case_variant","path":"/setupapp/pure/asp/browsexml/loginXML.asp?gofile=&mac=0123456789abcdef0123456789abcdef","count":6},
  {"name":"search_found","path":"/setupapp/pure/asp/BrowseXML/Search.asp?sSearchtype=1&Search=Smooth&mac=0123456789abcdef0123456789abcdef","count":1},
  {"name":"search_empty","path":"/setupapp/pure/asp/BrowseXML/Search.asp?sSearchtype=1&Search=missing&mac=0123456789abcdef0123456789abcdef","count":0}
 ]

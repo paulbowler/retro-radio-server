@@ -40,7 +40,7 @@ Search submission: PASS / FAIL
 Notes / redacted trace:
 ```
 
-The owner confirmed audible Smooth playback on a physical Pure ELAN IR5 on 3 October 2026, passing the core milestone playback gate. This checklist remains useful for broader regression coverage; listening duration, firmware and individual navigation/favourite checks have not been reported. Radio-Browser, custom stations and adaptive audio conversion are implemented; podcasts remain future work.
+The owner confirmed audible Smooth playback on a physical Pure ELAN IR5 on 3 October 2026, passing the core milestone playback gate. This checklist remains useful for broader regression coverage; listening duration, firmware and individual navigation/favourite checks have not been reported. Radio-Browser, custom stations and adaptive audio conversion are implemented; podcast subscriptions and Frontier on-demand menus are implemented, with physical-radio podcast acceptance still open.
 
 ## Development verification
 

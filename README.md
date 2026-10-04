@@ -11,10 +11,11 @@ Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, in
 - One channel per station, with conservatively matched stream alternatives. Automatic audio selection and startup fallback, plus optional audio choices per radio.
 - A shared station library available to every radio, with individual favourites.
 - Custom stations from public listening links, with automatic audio detection.
-- Radio menus for all stations, country, genre, favourites and search.
+- Radio menus for all stations, country, genre, favourites, podcasts and search.
+- Podcast search, shared RSS/Atom subscriptions and hourly episode updates, with MP3/AAC playback and browser previews.
 - Automatic HTTP/HTTPS negotiation and local HTTP delivery for older radios.
 - HLS and MPEG-DASH audio converted to continuous MP3, including BBC-style streams.
-- A responsive web interface with a dashboard, Stations, Radios, Activity and Help.
+- A responsive web interface with a dashboard, Stations, Podcasts, Radios, Activity and Help.
 - Persistent stations, favourites, radio names and stable station identifiers.
 
 ## Hardware status
@@ -60,6 +61,16 @@ Open Internet Radio on the radio. It should appear under **Radios**. Only overri
 Use **Stations → Your library** to manage saved stations. **Remove** deletes a station from every radio and its favourites after confirmation. **Add custom station** accepts a listening link, with optional country and genre metadata.
 
 Country suggestions use browser regional settings, with a remembered manual choice. Search terms and filters are sent to Radio-Browser; radio identifiers are not. No votes or playback-click telemetry are sent. Cached directory results remain usable during outages, independently of your saved library.
+
+### Listen to podcasts
+
+1. Open **Podcasts**, search by name and choose **Add podcast**. Alternatively, expand **Add by feed link** and paste a public podcast RSS or Atom link.
+2. Open **Podcasts** in your radio’s Internet Radio menu, choose a show and then an episode. Refresh the radio’s directory if the new menu is not visible yet.
+3. The web interface also lets you browse episodes and listen in your browser. Lists show 24 episodes per page, newest first.
+
+Subscriptions are shared by all radios. New episodes are fetched hourly; a failed feed refresh preserves the last successful episode list. Each refresh reads up to 200 compatible episodes, with up to 500 recent episodes retained per subscription. Removing a podcast removes its subscription and episode links from every radio.
+
+Search uses the [Apple podcast catalogue](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/Searching.html), without an account or API key. Search terms and a regional country code go to Apple; radio identifiers do not. Public RSS/Atom feeds with MP3 or AAC enclosures are supported. M4A/MP4, video, paid/authenticated feeds and listening-position sync are not supported yet. Audio passes through the checked HTTP relay, including HTTPS negotiation and byte-range requests where the publisher supports them. Podcast menu responses are tested against the documented Frontier format; physical-radio podcast playback still needs confirmation.
 
 ### Restart or upgrade
 
@@ -117,7 +128,7 @@ The web interface uses Go templates and bundled HTMX, with no Node build or fron
 - [DNS setup](docs/dns-setup.md)
 - [REST API and optional Home Assistant integration](docs/api.md)
 
-Issues and pull requests are welcome. For hardware reports, include the model, firmware and steps to reproduce. Remove radio identifiers, passwords and private configuration from traces. Broader radio coverage, podcasts and scheduled health checks are possible future work.
+Issues and pull requests are welcome. For hardware reports, include the model, firmware and steps to reproduce. Remove radio identifiers, passwords and private configuration from traces. Broader radio coverage and scheduled health checks are possible future work.
 
 ## Licence and acknowledgements
 

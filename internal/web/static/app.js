@@ -18,7 +18,7 @@
  for (const name of ["htmx:sendError", "htmx:timeout", "htmx:responseError"]) {
   document.addEventListener(name, event => {
    if (!event.detail.elt?.matches("[data-result-feedback]")) return;
-   showResult({success: false, title: "Couldn’t add station", message: "Couldn’t finish saving this station. Please try again."});
+   showResult({success: false, title: event.detail.elt.dataset.errorTitle || "Couldn’t add station", message: "Couldn’t finish saving. Please try again."});
   });
  }
  let pending = null;
@@ -125,3 +125,9 @@
   }
  });
 })();
+
+// Keep browser listening to one episode at a time.
+document.addEventListener("play", event => {
+ if (!(event.target instanceof HTMLAudioElement)) return;
+ for (const player of document.querySelectorAll("audio")) if (player !== event.target) player.pause();
+}, true);

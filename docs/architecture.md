@@ -6,6 +6,7 @@
 - `internal/protocol/frontierxml`: legacy directory requests, registration, favourites, search, metadata groups and station lookup.
 - `internal/store`: SQLite persistence, migrations, stable identifiers, per-radio favourites, health records and bounded directory caches.
 - `internal/catalogue`: Radio-Browser mirror discovery, filtering, failover and cached candidate resolution.
+- `internal/podcast`: bounded RSS/Atom parsing, cached Apple search and hourly feed refresh.
 - `internal/delivery`: checked upstream connections, live probes, HTTP relays and adaptive audio conversion.
 - `internal/web`: authenticated management routes, Go templates, progressive discovery and bundled HTMX.
 
@@ -48,3 +49,9 @@ Audio checks record timestamps, connection metadata and last success without dow
 Schema 6 stores stream alternatives, UUID aliases, old preset/stream aliases and per-radio audio preferences. Existing stations are consolidated only when normalized name, country and website or stream host establish a match; language and programme distinctions are retained. Custom stations remain independent. Favourite membership is unioned when channels merge. The migration is transactional.
 
 Catalogue pages assemble a bounded prefix of cached directory pages and group before applying UI offsets, so pages contain 24 distinct channels. Library admission probes up to 16 compatible alternatives, four at a time within 90 seconds, and saves only working playable streams. Playback checks capabilities, recent failures, direct/adaptive delivery and estimated codec/bitrate quality. Multi-stream channels always use the relay so startup failures can fall back before headers/audio are committed. Once playback starts, a change of codec requires reconnecting. Radio-specific overrides change the first attempted stream, retaining fallback.
+
+## Podcasts
+
+Schema 7 adds shared subscriptions and episode records without changing station or favourite data. A refresh atomically updates metadata and matches episodes by publisher GUID (falling back to enclosure URL), preserving IDs. It accepts up to 200 public MP3/AAC episodes per feed and retains at most 500 recent episodes. Feed failures preserve existing data. Deleting a subscription cascades to its episodes; a refresh cannot recreate a removed subscription.
+
+Feeds have a 4 MiB limit and a 20-second deadline, and use the same DNS-pinned, public-address-only client as streams. XML external entities are not expanded. Audio enclosure URLs are validated before saving and checked again through the playback transport. Podcast search uses Apple’s public search endpoint with 24 results, a bounded 15-minute cache and a 15-second deadline. No remote artwork is loaded. Episode playback uses the existing bounded relay, HTTP/HTTPS negotiation, GET/HEAD and Range support. `/episode/<id>` accepts stored identifiers only, and is accessible to radios without management authentication. Subscription and episode IDs can be guessed; this remains a trusted-LAN service.
