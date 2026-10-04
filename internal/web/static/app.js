@@ -7,6 +7,8 @@
  const accept = document.getElementById("confirmation-accept");
  const result = document.getElementById("result");
  function showResult(detail) {
+  const feedDialog = document.getElementById("add-podcast-feed");
+  if (feedDialog?.open) feedDialog.close();
   if (!result || result.open) return;
   result.classList.toggle("error", !detail.success);
   document.getElementById("result-icon").textContent = detail.success ? "✓" : "!";
@@ -131,3 +133,32 @@ document.addEventListener("play", event => {
  if (!(event.target instanceof HTMLAudioElement)) return;
  for (const player of document.querySelectorAll("audio")) if (player !== event.target) player.pause();
 }, true);
+
+// Keep the feed form in the persistent shell, like the radio rename dialog.
+(() => {
+ const dialog = document.getElementById("add-podcast-feed");
+ const form = document.getElementById("add-podcast-feed-form");
+ const link = document.getElementById("podcast-feed-link");
+ if (!dialog || !form || !dialog.showModal) return;
+ const busy = () => form.classList.contains("htmx-request");
+ document.addEventListener("click", event => {
+  if (event.target.closest("[data-add-podcast-feed]")) {
+   dialog.showModal();
+   link.focus();
+  }
+  if (event.target.closest("[data-cancel-podcast-feed]") && !busy()) dialog.close();
+ });
+ dialog.addEventListener("cancel", event => { if (busy()) event.preventDefault(); });
+ document.addEventListener("htmx:beforeRequest", event => {
+  if (event.detail.elt !== form && event.detail.target?.id === "content" && dialog.open && !busy()) dialog.close();
+ });
+ document.addEventListener("htmx:afterRequest", event => {
+  if (event.detail.elt === form && event.detail.successful && event.detail.xhr?.status === 200) {
+   dialog.close();
+   form.reset();
+  }
+ });
+ document.addEventListener("htmx:beforeHistorySave", () => {
+  if (dialog.open && !busy()) dialog.close();
+ });
+})();

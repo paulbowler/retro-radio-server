@@ -64,7 +64,7 @@ Country suggestions use browser regional settings, with a remembered manual choi
 
 ### Listen to podcasts
 
-1. Open **Podcasts**, search by name and choose **Add podcast**. Alternatively, expand **Add by feed link** and paste a public podcast RSS or Atom link.
+1. Open **Podcasts**, search by name and choose **Add podcast**. Alternatively, choose **Add by feed link** and paste a public podcast RSS or Atom link.
 2. Open **Podcasts** in your radio’s Internet Radio menu, choose a show and then an episode. Refresh the radio’s directory if the new menu is not visible yet.
 3. The web interface also lets you browse episodes and listen in your browser. Lists show 24 episodes per page, newest first.
 
