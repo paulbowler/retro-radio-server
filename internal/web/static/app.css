@@ -51,3 +51,7 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 .station-title{display:flex;gap:12px;min-width:0;align-items:flex-start}.station-title h3{flex:1}.station-artwork.station-thumb{flex:0 0 48px;width:48px;height:48px;border-radius:8px;font-size:24px}
 
 .brand{display:flex;align-items:center;gap:9px;font-size:16px;letter-spacing:.06em}.brand img{flex:none;border-radius:6px}.station-artwork .artwork-fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+
+/* Keep the logo and navigation in one compact header at every screen size. */
+.app{display:block}aside{position:static;height:auto;display:flex;flex-direction:row;align-items:center;gap:20px;padding:12px 5%;border-right:none;border-bottom:1px solid #61317d}.brand{flex:none}.brand img{width:52px;height:52px}aside nav{flex-direction:row;flex-wrap:wrap;gap:6px;margin:0}aside nav a{white-space:nowrap}main{margin:0 auto}.discovery-item{min-width:0;display:flex}.discovery-item>.station-card{width:100%}
+@media(max-width:600px){aside{gap:10px;padding:10px 16px}.brand img{width:48px;height:48px}aside nav{gap:2px;overflow:visible}aside nav a{padding:7px 8px;font-size:12px}}

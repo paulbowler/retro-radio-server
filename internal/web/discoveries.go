@@ -29,6 +29,16 @@ type discoveryJob struct {
 
 func (j *discoveryJob) count() int { j.mu.Lock(); defer j.mu.Unlock(); return len(j.items) }
 func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
+	since := 0
+	incremental := r.URL.Query().Has("since")
+	if incremental {
+		var err error
+		since, err = strconv.Atoi(r.URL.Query().Get("since"))
+		if err != nil || since < 0 || since > catalogue.PageSize {
+			http.Error(w, "Invalid result cursor", 400)
+			return
+		}
+	}
 	selected := r.URL.Query().Get("country")
 	if selected != "" && !validCountry(selected) {
 		http.Error(w, "Invalid country", 400)
@@ -67,7 +77,13 @@ func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
 		key += fmt.Sprintf(":%d", offset)
 	}
 	job := a.discoveriesJobs[key]
-	if job == nil || time.Since(job.started) > 2*time.Minute {
+	if incremental && (job == nil || r.URL.Query().Get("job") != strconv.FormatInt(job.started.UnixNano(), 10)) {
+		a.discoveriesMu.Unlock()
+		// The original result set has expired. Stop its poller without touching cards.
+		render(w, "discovery-poll", view{DiscoveryID: r.URL.Query().Get("job"), DiscoveryCursor: 1})
+		return
+	}
+	if job == nil || (!incremental && time.Since(job.started) > 2*time.Minute) {
 		if job != nil {
 			job.cancel()
 		}
@@ -106,17 +122,33 @@ func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
 	}
 	v.PreviousURL = stationPageURL(v, v.Previous, previousTrail)
 	v.NextURL = stationPageURL(v, v.Next, cursorTrail(append(trail, offset)))
-	v.DiscoveryURL = "/stations/discoveries?" + r.URL.Query().Encode()
+	v.DiscoveryID = strconv.FormatInt(job.started.UnixNano(), 10)
+	v.DiscoveryCursor = len(v.Candidates)
+	query := r.URL.Query()
+	query.Set("job", v.DiscoveryID)
+	query.Set("since", strconv.Itoa(v.DiscoveryCursor))
+	v.DiscoveryURL = "/stations/discoveries?" + query.Encode()
 	for i := range v.Candidates {
 		item := &v.Candidates[i]
 		if saved, err := a.Store.ChannelFor(model.CandidateStation(item.Candidate)); err == nil {
 			local := a.stationCard(saved, view{Page: "/stations"})
 			local.Health, local.Discovery = item.Health, true
-			local.AutoCheck = !v.Loading
+			local.AutoCheck = false
 			item.Managed = &local
 		}
 	}
-	render(w, "discoveries", v)
+	if incremental {
+		fresh := v.Candidates[:0]
+		for _, item := range v.Candidates {
+			if item.Sequence > since {
+				fresh = append(fresh, item)
+			}
+		}
+		v.Candidates = fresh
+		render(w, "discovery-update", v)
+	} else {
+		render(w, "discoveries", v)
+	}
 }
 
 func (a *App) findDiscoveries(ctx context.Context, job *discoveryJob) {
@@ -143,8 +175,8 @@ func (a *App) findDiscoveries(ctx context.Context, job *discoveryJob) {
 			job.mu.Unlock()
 			break
 		}
-		for start := 0; start < len(result.Stations) && job.count() < catalogue.PageSize && ctx.Err() == nil; start += 4 {
-			end := start + 4
+		for start := 0; start < len(result.Stations) && job.count() < catalogue.PageSize && ctx.Err() == nil; {
+			end := start + min(4, catalogue.PageSize-job.count())
 			if end > len(result.Stations) {
 				end = len(result.Stations)
 			}
@@ -172,7 +204,7 @@ func (a *App) findDiscoveries(ctx context.Context, job *discoveryJob) {
 					}
 					candidate.Codec, candidate.Bitrate = health.Codec, health.Bitrate
 					job.mu.Lock()
-					job.items = append(job.items, candidateCard{Rank: rank, Discovery: true, Candidate: candidate, Health: health})
+					job.items = append(job.items, candidateCard{Sequence: len(job.items) + 1, Rank: rank, Discovery: true, Candidate: candidate, Health: health})
 					sort.Slice(job.items, func(i, j int) bool { return job.items[i].Rank < job.items[j].Rank })
 					job.mu.Unlock()
 				}(offset+index, candidate)
@@ -182,6 +214,7 @@ func (a *App) findDiscoveries(ctx context.Context, job *discoveryJob) {
 			job.nextOffset = offset + end
 			job.more = end < len(result.Stations) || result.More
 			job.mu.Unlock()
+			start = end
 		}
 		if len(result.Stations) < catalogue.PageSize {
 			break

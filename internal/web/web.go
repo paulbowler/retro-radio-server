@@ -75,6 +75,7 @@ type card struct {
 	Context      string
 }
 type candidateCard struct {
+	Sequence  int
 	Rank      int
 	Discovery bool
 	AutoCheck bool
@@ -120,6 +121,8 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
+	DiscoveryID                                 string
+	DiscoveryCursor                             int
 	Radios                                      []radioOverview
 	PlayingRadios                               int
 	Podcasts                                    []model.Podcast
