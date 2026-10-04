@@ -238,7 +238,7 @@ func TestDeviceHeartsAndSharedLibrary(t *testing.T) {
 	}
 	initial := httptest.NewRecorder()
 	h.ServeHTTP(initial, httptest.NewRequest("GET", "http://radio.local/devices?device="+d.ID, nil))
-	if !strings.Contains(initial.Body.String(), `hx-trigger="load"`) || strings.Contains(initial.Body.String(), "Check again") || strings.Contains(initial.Body.String(), ">Remove from this radio<") {
+	if strings.Contains(initial.Body.String(), `hx-trigger="load"`) || strings.Contains(initial.Body.String(), "Check again") || strings.Contains(initial.Body.String(), ">Remove from this radio<") {
 		t.Fatal("manual controls remain", initial.Body.String())
 	}
 	a.Relay.Client = &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {

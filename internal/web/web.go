@@ -49,6 +49,9 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 
 type App struct {
 	ArtworkClient        *http.Client
+	artworkMu            sync.Mutex
+	artworkLoads         sync.Map
+	artworkPending       map[string]bool
 	enrichmentMu         sync.Mutex
 	enrichmentAt         map[string]time.Time
 	Podcasts             *podcast.Service
@@ -331,7 +334,7 @@ func (a *App) stationCard(s model.Station, v view) card {
 			fav = true
 		}
 	}
-	return card{AudioChoices: delivery.RankedStreams(s, caps, ""), Preferred: preferred, Station: s, Devices: v.Devices, Selected: v.Selected, Health: h, Favourite: fav, AutoCheck: v.AutoCheck, Radios: a.Store.StationUsers(s.ID), Context: v.Page}
+	return card{AudioChoices: delivery.RankedStreams(s, caps, ""), Preferred: preferred, Station: s, Devices: v.Devices, Selected: v.Selected, Health: h, Favourite: fav, AutoCheck: false, Radios: a.Store.StationUsers(s.ID), Context: v.Page}
 }
 func (a *App) screen(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/favourites" {

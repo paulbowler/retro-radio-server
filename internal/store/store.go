@@ -40,7 +40,7 @@ func (s *Store) migrate() error {
 	if err := s.DB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 9 {
+	if version > 10 {
 		return fmt.Errorf("database schema %d is newer than this server", version)
 	}
 	if version >= 1 {
@@ -65,7 +65,10 @@ func (s *Store) migrate() error {
 		if err := s.migrateV8(); err != nil {
 			return err
 		}
-		return s.migrateV9()
+		if err := s.migrateV9(); err != nil {
+			return err
+		}
+		return s.migrateV10()
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -112,7 +115,10 @@ func (s *Store) migrate() error {
 	if err := s.migrateV8(); err != nil {
 		return err
 	}
-	return s.migrateV9()
+	if err := s.migrateV9(); err != nil {
+		return err
+	}
+	return s.migrateV10()
 }
 func (s *Store) Stations(search string) ([]model.Station, error) {
 	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
