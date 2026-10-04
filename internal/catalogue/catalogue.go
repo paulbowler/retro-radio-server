@@ -120,7 +120,7 @@ func (s *Service) fetch(ctx context.Context, path string) ([]model.Candidate, er
 		}
 		out := []model.Candidate{}
 		for _, a := range items {
-			if uuid.MatchString(a.UUID) && len(a.Name) > 0 && len(a.Name) <= 200 && len(a.URL) < 4096 && len(a.Resolved) < 4096 && len(a.Tags) <= 2000 && len(a.Country) <= 100 && len(a.Language) <= 256 {
+			if uuid.MatchString(a.UUID) && len(a.Name) > 0 && len(a.Name) <= 200 && len(a.Homepage) < 4096 && len(a.URL) < 4096 && len(a.Resolved) < 4096 && len(a.Tags) <= 2000 && len(a.Country) <= 100 && len(a.Language) <= 256 {
 				a.Codec = strings.ToUpper(a.Codec)
 				if a.Codec == "AAC+" || a.Codec == "HE-AAC" {
 					a.Codec = "AAC"
@@ -143,14 +143,14 @@ func (s *Service) Search(ctx context.Context, term string, offset int) (Result, 
 }
 
 // SearchFiltered combines directory name, country and genre filters.
-func (s *Service) SearchFiltered(ctx context.Context, term, country, genre string, offset int) (Result, error) {
+func (s *Service) rawSearch(ctx context.Context, term, country, genre string, offset int) (Result, error) {
 	term = strings.TrimSpace(term)
 	country = strings.ToUpper(country)
 	genre = strings.TrimSpace(genre)
 	if len(term) > 120 || len(genre) > 100 || (country != "" && !countryCode.MatchString(country)) || offset < 0 || offset > 1000 {
 		return Result{}, errors.New("search is too long or page is out of range")
 	}
-	key := fmt.Sprintf("%s:%d:%d", strings.ToLower(term), offset, PageSize)
+	key := fmt.Sprintf("directory-streams:v2:%s:%d:%d", strings.ToLower(term), offset, PageSize)
 	if country != "" || genre != "" {
 		key += ":" + country + ":" + strings.ToLower(genre)
 	}
@@ -183,12 +183,12 @@ func (s *Service) SearchFiltered(ctx context.Context, term, country, genre strin
 }
 
 // Popular returns stations ranked by Radio-Browser listener clicks.
-func (s *Service) Popular(ctx context.Context, country string, offset int) (Result, error) {
+func (s *Service) rawPopular(ctx context.Context, country string, offset int) (Result, error) {
 	country = strings.ToUpper(country)
 	if (country != "" && !countryCode.MatchString(country)) || offset < 0 || offset > 1000 {
 		return Result{}, errors.New("country or directory page is invalid")
 	}
-	key := fmt.Sprintf("directory-popular-country:v1:%s:%d", country, offset)
+	key := fmt.Sprintf("directory-popular-country:v2:%s:%d", country, offset)
 	cached, updated, err := s.Store.Cache(key)
 	var previous []model.Candidate
 	if err == nil && json.Unmarshal(cached, &previous) == nil && time.Since(updated) < 30*time.Minute {
@@ -254,6 +254,19 @@ func (s *Service) Resolve(ctx context.Context, id string) (model.Station, error)
 	if e = delivery.CheckTarget(ctx, raw); e != nil {
 		return model.Station{}, errors.New("station URL is blocked or cannot be resolved")
 	}
-	station := model.Station{Name: a.Name, URL: raw, Codec: a.Codec, Bitrate: a.Bitrate, RBUUID: a.UUID, Source: "radio-browser", Country: a.Country, Language: a.Language, Tags: a.Tags, HLS: a.HLS != 0}
+	station := model.CandidateStation(a)
+	station.Name = model.ChannelName(station.Name)
+	related, _ := s.Store.CachedCandidates()
+	related = append([]model.Candidate{a}, related...)
+	seen := map[string]bool{}
+	for _, candidate := range related {
+		v := model.CandidateStation(candidate)
+		if seen[candidate.UUID] || !model.SameChannel(station, v) {
+			continue
+		}
+		seen[candidate.UUID] = true
+		station.Variants = append(station.Variants, model.StreamVariant{ID: candidate.UUID, UUID: candidate.UUID, URL: v.URL, Codec: v.Codec, Bitrate: v.Bitrate, HLS: v.HLS})
+	}
+
 	return station, nil
 }

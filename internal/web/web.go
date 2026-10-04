@@ -26,6 +26,7 @@ import (
 //go:embed dashboard.html static/*
 var assets embed.FS
 var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
+	"addOne":               func(n int) int { return n + 1 },
 	"countryFlag":          countryFlag,
 	"countryName":          countryName,
 	"candidateStationCard": candidateStationCard,
@@ -42,6 +43,8 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 }).ParseFS(assets, "dashboard.html"))
 
 type App struct {
+	enrichmentMu         sync.Mutex
+	enrichmentAt         map[string]time.Time
 	Store                *store.Store
 	Relay                *delivery.Relay
 	Catalogue            *catalogue.Service
@@ -50,17 +53,19 @@ type App struct {
 	discoveriesJobs      map[string]*discoveryJob
 }
 type card struct {
-	Discovery bool
-	Station   model.Station
-	Devices   []model.Device
-	Selected  string
-	Health    model.Health
-	Favourite bool
-	AutoCheck bool
-	Radios    int
-	Message   string
-	Error     bool
-	Context   string
+	AudioChoices []model.StreamVariant
+	Preferred    string
+	Discovery    bool
+	Station      model.Station
+	Devices      []model.Device
+	Selected     string
+	Health       model.Health
+	Favourite    bool
+	AutoCheck    bool
+	Radios       int
+	Message      string
+	Error        bool
+	Context      string
 }
 type candidateCard struct {
 	Rank      int
@@ -83,11 +88,28 @@ func candidateStationCard(item candidateCard) card {
 	if country == "" {
 		country = candidate.CountryCode
 	}
-	codec := candidate.Codec
-	if codec == "" {
-		codec = "Unknown"
+	station := model.CandidateStation(candidate)
+	station.Variants = []model.StreamVariant{{ID: candidate.UUID, UUID: candidate.UUID, URL: raw, Codec: candidate.Codec, Bitrate: candidate.Bitrate, HLS: candidate.HLS != 0}}
+	for _, c := range candidate.Variants {
+		v := model.CandidateStation(c)
+		station.Variants = append(station.Variants, model.StreamVariant{ID: c.UUID, UUID: c.UUID, URL: v.URL, Codec: v.Codec, Bitrate: v.Bitrate, HLS: v.HLS})
 	}
-	return card{Station: model.Station{Name: candidate.Name, URL: raw, Country: country, Codec: codec, Bitrate: candidate.Bitrate, Tags: candidate.Tags, HLS: candidate.HLS != 0, RBUUID: candidate.UUID, Source: "radio-browser"}, Health: item.Health, Discovery: item.Discovery, AutoCheck: item.AutoCheck, Devices: item.Devices, Selected: item.Selected, Context: "/stations"}
+	if chosen, err := delivery.ChooseStream(station, model.LegacyXML, ""); err == nil {
+		station = chosen
+	}
+	if item.Health.Working {
+		for _, v := range station.Variants {
+			if v.ID == item.Health.VariantID {
+				variants := station.Variants
+				station = v.Station(station)
+				station.Variants = variants
+				station.Codec = item.Health.Codec
+				station.Bitrate = item.Health.Bitrate
+				break
+			}
+		}
+	}
+	return card{Station: model.Station{Variants: station.Variants, Name: candidate.Name, URL: station.URL, Country: country, Codec: station.Codec, Bitrate: station.Bitrate, Tags: candidate.Tags, HLS: candidate.HLS != 0, RBUUID: candidate.UUID, Source: "radio-browser"}, Health: item.Health, Discovery: item.Discovery, AutoCheck: item.AutoCheck, Devices: item.Devices, Selected: item.Selected, Context: "/stations"}
 }
 
 type view struct {
@@ -163,6 +185,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /stations/check", a.check)
 	mux.HandleFunc("POST /stations/candidate/check", a.checkCandidate)
 	mux.HandleFunc("GET /diagnostics", a.diagnostics)
+	mux.HandleFunc("POST /stations/audio", a.audioOptions)
 	mux.HandleFunc("GET /api/v1/devices", func(w http.ResponseWriter, r *http.Request) { v, e := a.Store.Devices(); respond(w, v, e) })
 	mux.HandleFunc("GET /api/v1/stations", func(w http.ResponseWriter, r *http.Request) {
 		v, e := a.Store.Stations(r.URL.Query().Get("q"))
@@ -195,6 +218,9 @@ func (a *App) Handler() http.Handler {
 		}
 		health, _ := a.Store.Health(s.ID)
 		play, e := delivery.PlayURL(a.Base, s, d.Capabilities, health)
+		if len(s.Variants) > 1 {
+			play, _, e = delivery.RadioPlayURL(a.Base, s, d, a.Store.Preferred(d.ID, s.ID))
+		}
 		if e != nil {
 			http.Error(w, e.Error(), 422)
 			return
@@ -242,6 +268,20 @@ func (a *App) baseView(r *http.Request) (view, error) {
 }
 func (a *App) stationCard(s model.Station, v view) card {
 	h, _ := a.Store.Health(s.ID)
+	preferred := a.Store.Preferred(v.Selected, s.ID)
+	caps := model.LegacyXML
+	if d, err := a.Store.Device(v.Selected); err == nil {
+		caps = d.Capabilities
+	}
+	if chosen, err := delivery.ChooseStream(s, caps, preferred); err == nil {
+		s = chosen
+		for _, option := range s.Variants {
+			if option.ID == s.VariantID && !option.Health.Checked.IsZero() {
+				h = option.Health
+				break
+			}
+		}
+	}
 	favs, _ := a.Store.Favourites(v.Selected)
 	fav := false
 	for _, f := range favs {
@@ -249,7 +289,7 @@ func (a *App) stationCard(s model.Station, v view) card {
 			fav = true
 		}
 	}
-	return card{Station: s, Devices: v.Devices, Selected: v.Selected, Health: h, Favourite: fav, AutoCheck: v.AutoCheck, Radios: a.Store.StationUsers(s.ID), Context: v.Page}
+	return card{AudioChoices: delivery.RankedStreams(s, caps, ""), Preferred: preferred, Station: s, Devices: v.Devices, Selected: v.Selected, Health: h, Favourite: fav, AutoCheck: v.AutoCheck, Radios: a.Store.StationUsers(s.ID), Context: v.Page}
 }
 func (a *App) screen(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/favourites" {
@@ -454,7 +494,7 @@ func (a *App) searchView(r *http.Request, v *view) {
 	}
 	for _, c := range res.Stations {
 		item := candidateCard{Candidate: c, Devices: v.Devices, Selected: v.Selected}
-		if saved, e := a.Store.ByUUID(c.UUID); e == nil {
+		if saved, e := a.Store.ChannelFor(model.CandidateStation(c)); e == nil {
 			local := a.stationCard(saved, *v)
 			local.Context = "/stations"
 			item.Managed = &local
@@ -661,6 +701,7 @@ func (a *App) check(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	s = a.enrichChannel(r.Context(), s)
 	_, e = a.Relay.Check(r.Context(), s)
 	if e != nil {
 		http.Error(w, "Couldn’t save the station check. Please try again.", 503)
@@ -790,25 +831,16 @@ func (a *App) selectStation(w http.ResponseWriter, r *http.Request) {
 		fail("This station is unavailable. Search for it again.")
 		return
 	}
-	if saved, err := a.Store.ByUUID(s.RBUUID); err == nil {
-		s = saved
+	if candidate, err := a.Store.Candidate(s.RBUUID); err == nil {
+		if _, err = a.Catalogue.SearchFiltered(r.Context(), model.ChannelName(s.Name), candidate.CountryCode, "", 0); err == nil {
+			if enriched, err := a.Catalogue.Resolve(r.Context(), s.RBUUID); err == nil {
+				s = enriched
+			}
+		}
 	}
-	health, e := a.Relay.Probe(r.Context(), s)
-	if e != nil || !health.Working {
-		fail(streamProblem(health))
-		return
-	}
-	s.Codec = health.Codec
-	s.HLS = health.Adaptive != ""
-	s.Bitrate = health.Bitrate
-	s, e = a.Store.SaveStation(s)
+	s, e = a.admitChannel(r.Context(), s)
 	if e != nil {
-		http.Error(w, "Couldn’t save this station. Please try again.", 503)
-		return
-	}
-	health.StationID = s.ID
-	if e = a.Store.SaveHealth(health); e != nil {
-		http.Error(w, "Couldn’t finish saving this station. Please try again.", 503)
+		fail("We couldn’t play this station. Try again later.")
 		return
 	}
 	if !partial(r) {

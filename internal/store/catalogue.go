@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"retroradio.local/server/internal/model"
 	"strconv"
 	"time"
@@ -58,7 +57,12 @@ func (s *Store) CachePut(key string, entries []model.Candidate) error {
 	if _, e = tx.Exec(`INSERT INTO catalogue_cache VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET payload=excluded.payload,updated=excluded.updated`, key, b, now); e != nil {
 		return e
 	}
+	flat := []model.Candidate{}
 	for _, a := range entries {
+		flat = append(flat, a)
+		flat = append(flat, a.Variants...)
+	}
+	for _, a := range flat {
 		b, e = json.Marshal(a)
 		if e != nil {
 			return e
@@ -84,22 +88,23 @@ func (s *Store) Candidate(uuid string) (model.Candidate, error) {
 	return a, e
 }
 func (s *Store) SaveStation(a model.Station) (model.Station, error) {
+	s.stationWrite.Lock()
+	defer s.stationWrite.Unlock()
+	original := a
+	if a.ID != "" && a.Source != "custom" && a.RBUUID == "" {
+		return a, sql.ErrNoRows
+	}
+	if a.ID == "" && a.Source != "custom" {
+		if saved, err := s.ChannelFor(a); err == nil {
+			a.ID = saved.ID
+			a.StreamID = saved.StreamID
+		}
+	}
 	tx, e := s.DB.Begin()
 	if e != nil {
 		return a, e
 	}
 	defer tx.Rollback()
-	if a.RBUUID != "" {
-		var id string
-		e = tx.QueryRow(`SELECT id FROM stations WHERE rb_uuid=?`, a.RBUUID).Scan(&id)
-		if e == nil {
-			tx.Rollback()
-			return s.Station(id, false)
-		}
-		if !errors.Is(e, sql.ErrNoRows) {
-			return a, e
-		}
-	}
 	if a.ID == "" {
 		var n int
 		e = tx.QueryRow(`UPDATE station_ids SET next_id=next_id+1 WHERE singleton=1 RETURNING next_id-1`).Scan(&n)
@@ -112,8 +117,11 @@ func (s *Store) SaveStation(a model.Station) (model.Station, error) {
 			return a, e
 		}
 		a.StreamID = hex.EncodeToString(b)
-		_, e = tx.Exec(`INSERT INTO stations(id,name,url,stream_id,codec,bitrate,rb_uuid,source,country,tags,language,hls) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?,?,?,?)`, a.ID, a.Name, a.URL, a.StreamID, a.Codec, a.Bitrate, a.RBUUID, a.Source, a.Country, a.Tags, a.Language, a.HLS)
-	} else {
+		if a.Source != "custom" {
+			a.Name = model.ChannelName(a.Name)
+		}
+		_, e = tx.Exec(`INSERT INTO stations(id,name,url,stream_id,codec,bitrate,rb_uuid,source,country,tags,language,hls,homepage) VALUES(?,?,?,?,?,?,NULLIF(?,''),?,?,?,?,?,?)`, a.ID, a.Name, a.URL, a.StreamID, a.Codec, a.Bitrate, a.RBUUID, a.Source, a.Country, a.Tags, a.Language, a.HLS, a.Homepage)
+	} else if a.Source == "custom" {
 		var oldURL string
 		e = tx.QueryRow(`SELECT url FROM stations WHERE id=? AND source='custom'`, a.ID).Scan(&oldURL)
 		if e != nil {
@@ -122,15 +130,34 @@ func (s *Store) SaveStation(a model.Station) (model.Station, error) {
 		_, e = tx.Exec(`UPDATE stations SET name=?,url=?,codec=?,bitrate=?,country=?,tags=?,language=?,hls=? WHERE id=? AND source='custom'`, a.Name, a.URL, a.Codec, a.Bitrate, a.Country, a.Tags, a.Language, a.HLS, a.ID)
 		if e == nil && oldURL != a.URL {
 			_, e = tx.Exec(`DELETE FROM stream_health WHERE station_id=?`, a.ID)
+			if e == nil {
+				_, e = tx.Exec(`DELETE FROM stream_variants WHERE station_id=?`, a.ID)
+			}
 		}
 	}
 	if e != nil {
 		return a, e
 	}
+	if _, e = tx.Exec(`UPDATE stations SET homepage=? WHERE id=? AND homepage='' AND ?<>''`, a.Homepage, a.ID, a.Homepage); e != nil {
+		return a, e
+	}
+	if e = addVariant(tx, a); e != nil {
+		return a, e
+	}
 	if e = tx.Commit(); e != nil {
 		return a, e
 	}
-	return s.Station(a.ID, false)
+	saved, e := s.Station(a.ID, false)
+	if e != nil {
+		return a, e
+	}
+	for _, v := range saved.Variants {
+		if v.URL == original.URL {
+			saved.VariantID = v.ID
+			break
+		}
+	}
+	return saved, nil
 }
 func (s *Store) SaveAndFavourite(a model.Station, device string) (model.Station, error) {
 	if _, e := s.Device(device); e != nil {
@@ -153,6 +180,10 @@ func (s *Store) Health(id string) (model.Health, error) {
 	return h, e
 }
 func (s *Store) SaveHealth(h model.Health) error {
+	if h.VariantID == "" {
+		_ = s.DB.QueryRow(`SELECT id FROM stream_variants WHERE station_id=? AND url=(SELECT url FROM stations WHERE id=?)`, h.StationID, h.StationID).Scan(&h.VariantID)
+	}
+
 	b, e := json.Marshal(h)
 	if e != nil {
 		return e
@@ -166,8 +197,14 @@ func (s *Store) SaveHealth(h model.Health) error {
 	if e != nil {
 		return e
 	}
+	if h.VariantID != "" {
+		_, e = tx.Exec(`UPDATE stream_variants SET health=?,codec=CASE WHEN ? THEN ? ELSE codec END,bitrate=CASE WHEN ? THEN ? ELSE bitrate END,hls=CASE WHEN ?<>'' THEN 1 ELSE hls END WHERE id=? AND station_id=?`, string(b), h.Working, h.Codec, h.Working, h.Bitrate, h.Adaptive, h.VariantID, h.StationID)
+		if e != nil {
+			return e
+		}
+	}
 	if h.Working && h.Codec != "" {
-		_, e = tx.Exec(`UPDATE stations SET codec=?,bitrate=?,hls=CASE WHEN ?<>'' THEN 1 ELSE hls END WHERE id=?`, h.Codec, h.Bitrate, h.Adaptive, h.StationID)
+		_, e = tx.Exec(`UPDATE stations SET codec=?,bitrate=?,hls=CASE WHEN ?<>'' THEN 1 ELSE hls END WHERE id=? AND (?='' OR url=(SELECT url FROM stream_variants WHERE id=?))`, h.Codec, h.Bitrate, h.Adaptive, h.StationID, h.VariantID, h.VariantID)
 		if e != nil {
 			return e
 		}
@@ -177,7 +214,7 @@ func (s *Store) SaveHealth(h model.Health) error {
 
 func (s *Store) ByUUID(uuid string) (model.Station, error) {
 	var id string
-	e := s.DB.QueryRow(`SELECT id FROM stations WHERE rb_uuid=?`, uuid).Scan(&id)
+	e := s.DB.QueryRow(`SELECT station_id FROM stream_variants JOIN variant_uuids ON variant_uuids.variant_id=stream_variants.id WHERE variant_uuids.uuid=?`, uuid).Scan(&id)
 	if e != nil {
 		return model.Station{}, e
 	}

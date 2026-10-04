@@ -109,9 +109,10 @@ func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
 	v.DiscoveryURL = "/stations/discoveries?" + r.URL.Query().Encode()
 	for i := range v.Candidates {
 		item := &v.Candidates[i]
-		if saved, err := a.Store.ByUUID(item.Candidate.UUID); err == nil {
+		if saved, err := a.Store.ChannelFor(model.CandidateStation(item.Candidate)); err == nil {
 			local := a.stationCard(saved, view{Page: "/stations"})
 			local.Health, local.Discovery = item.Health, true
+			local.AutoCheck = !v.Loading
 			item.Managed = &local
 		}
 	}
@@ -179,7 +180,7 @@ func (a *App) findDiscoveries(ctx context.Context, job *discoveryJob) {
 			group.Wait()
 			job.mu.Lock()
 			job.nextOffset = offset + end
-			job.more = end < len(result.Stations) || len(result.Stations) == catalogue.PageSize
+			job.more = end < len(result.Stations) || result.More
 			job.mu.Unlock()
 		}
 		if len(result.Stations) < catalogue.PageSize {

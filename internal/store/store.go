@@ -10,10 +10,14 @@ import (
 	"fmt"
 	_ "modernc.org/sqlite"
 	"retroradio.local/server/internal/model"
+	"sync"
 	"time"
 )
 
-type Store struct{ DB *sql.DB }
+type Store struct {
+	DB           *sql.DB
+	stationWrite sync.Mutex
+}
 
 func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
@@ -21,7 +25,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db}
+	s := &Store{DB: db}
 	if err = s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -36,7 +40,7 @@ func (s *Store) migrate() error {
 	if err := s.DB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return fmt.Errorf("database schema %d is newer than this server", version)
 	}
 	if version >= 1 {
@@ -49,7 +53,10 @@ func (s *Store) migrate() error {
 		if err := s.migrateV4(); err != nil {
 			return err
 		}
-		return s.migrateV5()
+		if err := s.migrateV5(); err != nil {
+			return err
+		}
+		return s.migrateV6()
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -84,10 +91,13 @@ func (s *Store) migrate() error {
 	if err := s.migrateV4(); err != nil {
 		return err
 	}
-	return s.migrateV5()
+	if err := s.migrateV5(); err != nil {
+		return err
+	}
+	return s.migrateV6()
 }
 func (s *Store) Stations(search string) ([]model.Station, error) {
-	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
+	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
 	if err != nil {
 		return nil, err
 	}
@@ -95,12 +105,23 @@ func (s *Store) Stations(search string) ([]model.Station, error) {
 	out := []model.Station{}
 	for rows.Next() {
 		var a model.Station
-		if err = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS); err != nil {
+		if err = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i], err = s.withVariants(out[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 func (s *Store) Station(id string, stream bool) (model.Station, error) {
 	var a model.Station
@@ -108,8 +129,21 @@ func (s *Store) Station(id string, stream bool) (model.Station, error) {
 	if stream {
 		col = "stream_id"
 	}
-	err := s.DB.QueryRow(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls FROM stations WHERE `+col+`=?`, id).Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS)
-	return a, err
+	err := s.DB.QueryRow(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations WHERE `+col+`=?`, id).Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage)
+	if err == sql.ErrNoRows {
+		var canonical string
+		aliasColumn := "old_id"
+		if stream {
+			aliasColumn = "old_stream"
+		}
+		if s.DB.QueryRow(`SELECT station_id FROM station_aliases WHERE `+aliasColumn+`=?`, id).Scan(&canonical) == nil {
+			return s.Station(canonical, false)
+		}
+	}
+	if err != nil {
+		return a, err
+	}
+	return s.withVariants(a)
 }
 
 // The protocol's 'mac' is an opaque identifier, not necessarily a hardware MAC.
@@ -184,11 +218,16 @@ func (s *Store) Favourite(device, station string, on bool) error {
 	if on {
 		return s.Assign(device, station, true)
 	}
-	_, err := s.DB.Exec(`DELETE FROM favourites WHERE device_id=? AND station_id=?`, device, station)
+	channel, err := s.Station(station, false)
+	if err != nil {
+		return err
+	}
+	station = channel.ID
+	_, err = s.DB.Exec(`DELETE FROM favourites WHERE device_id=? AND station_id=?`, device, station)
 	return err
 }
 func (s *Store) Favourites(device string) ([]model.Station, error) {
-	rows, e := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls FROM stations JOIN favourites ON favourites.station_id=stations.id WHERE favourites.device_id=? ORDER BY name`, device)
+	rows, e := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage FROM stations JOIN favourites ON favourites.station_id=stations.id WHERE favourites.device_id=? ORDER BY name`, device)
 	if e != nil {
 		return nil, e
 	}
@@ -196,12 +235,23 @@ func (s *Store) Favourites(device string) ([]model.Station, error) {
 	out := []model.Station{}
 	for rows.Next() {
 		var a model.Station
-		if e = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS); e != nil {
+		if e = rows.Scan(&a.ID, &a.Name, &a.URL, &a.StreamID, &a.Codec, &a.Bitrate, &a.RBUUID, &a.Source, &a.Country, &a.Tags, &a.Language, &a.HLS, &a.Homepage); e != nil {
 			return nil, e
 		}
 		out = append(out, a)
 	}
-	return out, rows.Err()
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	for i := range out {
+		out[i], e = s.withVariants(out[i])
+		if e != nil {
+			return nil, e
+		}
+	}
+	return out, nil
 }
 func (s *Store) Log(device, kind, detail string) error {
 	_, err := s.DB.Exec(`INSERT INTO activity(time,device,kind,detail) VALUES(?,?,?,?); DELETE FROM activity WHERE id <= (SELECT COALESCE(MAX(id),0)-1000 FROM activity);`, time.Now().UTC().Format(time.RFC3339Nano), device, kind, detail)

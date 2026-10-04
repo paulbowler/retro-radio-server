@@ -32,6 +32,9 @@ func testRelay(t *testing.T, up *httptest.Server) *Relay {
 	if e != nil {
 		t.Fatal(e)
 	}
+	if _, e = s.DB.Exec(`UPDATE stream_variants SET url=?`, "https://audio.example/live"); e != nil {
+		t.Fatal(e)
+	}
 	p := New(s)
 	target, _ := url.Parse(up.URL)
 	// Test-only transport maps an ordinary public HTTPS origin to the TLS fixture.

@@ -20,6 +20,12 @@ import (
 )
 
 func PlayURL(base string, s model.Station, c model.Capabilities, health ...model.Health) (string, error) {
+	if len(s.Variants) > 1 {
+		if len(RankedStreams(s, c, "")) == 0 {
+			return "", errors.New("no compatible audio stream")
+		}
+		return base + "/stream/" + s.StreamID, nil
+	}
 	if adaptiveKind(s.URL, "", s.HLS) != "" {
 		if !c.HTTP || !c.MP3 {
 			return "", errors.New("adaptive relay requires HTTP and MP3 playback")
@@ -223,48 +229,18 @@ func (p *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many streams", 503)
 		return
 	}
-	if kind := adaptiveKind(s.URL, "", s.HLS); kind != "" {
+	selected, res, kind, err := p.openStream(r, s)
+	if err != nil {
+		p.Store.Log("", "Stream failed", s.Name+": alternatives unavailable")
+		http.Error(w, "station unavailable", 502)
+		return
+	}
+	s = selected
+	if kind != "" {
 		p.serveAdaptive(w, r, s, kind)
-		return
-	}
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, s.URL, nil)
-	if err != nil {
-		http.Error(w, "invalid upstream", 502)
-		return
-	}
-	req.Header.Set("User-Agent", "RetroRadio/0.2")
-	for _, h := range []string{"Icy-MetaData", "Range", "If-Range"} {
-		if v := r.Header.Get(h); v != "" {
-			req.Header.Set(h, v)
-		}
-	}
-	res, err := p.request(req)
-	if err != nil {
-		detail, message := "connection failed", "upstream connection failed"
-		if errors.Is(err, ErrUnsafeTarget) {
-			detail = "blocked by address policy; check broadcaster DNS overrides"
-			message = "upstream address blocked; check local DNS overrides"
-		}
-		p.Store.Log("", "Stream failed", s.Name+": "+detail)
-		http.Error(w, message, 502)
 		return
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 && res.StatusCode != 206 && res.StatusCode != 416 {
-		p.Store.Log("", "Stream failed", fmt.Sprintf("%s: HTTP %d", s.Name, res.StatusCode))
-		http.Error(w, "upstream unavailable", 502)
-		return
-	}
-	ct := strings.ToLower(res.Header.Get("Content-Type"))
-	if kind := adaptiveKind(res.Request.URL.String(), ct, s.HLS); kind != "" {
-		res.Body.Close()
-		p.serveAdaptive(w, r, s, kind)
-		return
-	}
-	if res.StatusCode != 416 && (s.HLS || !audioContent(ct)) {
-		http.Error(w, "upstream is not a direct audio stream; playlists require future support", 502)
-		return
-	}
 	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Icy-MetaInt", "Icy-Br", "Icy-Description", "Icy-Genre", "Icy-Name", "Ice-Audio-Info", "Icy-Url"} {
 		if v := res.Header.Get(h); v != "" {
 			w.Header().Set(h, v)

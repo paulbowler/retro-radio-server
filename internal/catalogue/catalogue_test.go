@@ -143,7 +143,7 @@ func TestCombinedSearchFiltersAndCacheIsolation(t *testing.T) {
 	s := &Service{Store: db, Mirrors: []string{"https://directory.example"}, Client: &http.Client{Transport: transport(func(r *http.Request) (*http.Response, error) {
 		calls++
 		q := r.URL.Query()
-		if q.Get("name") != "BBC" || q.Get("tag") != "jazz" || q.Get("offset") != "24" || q.Get("limit") != "24" || q.Get("hidebroken") != "true" {
+		if q.Get("name") != "BBC" || q.Get("tag") != "jazz" || q.Get("offset") != "0" || q.Get("limit") != "24" || q.Get("hidebroken") != "true" {
 			t.Error(q)
 		}
 		if q.Get("countrycode") != "GB" && q.Get("countrycode") != "US" {

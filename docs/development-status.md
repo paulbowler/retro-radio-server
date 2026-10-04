@@ -7,6 +7,7 @@ Updated 4 October 2026.
 - Frontier XML directory adapter with stable station and stream identifiers.
 - SQLite migrations preserving devices, stations and individual favourites.
 - A shared library available to all radios, with country and genre menus.
+- Conservative channel grouping, multiple checked audio alternatives, startup fallback and per-radio audio preferences.
 - Radio-Browser discovery, 24-result search pagination, combined filters and bounded offline caching.
 - Progressive discovery of 24 usable popular stations per page in the selected country, with pagination above and below discovery, search and library lists.
 - Custom station creation and editing with automatic audio detection and checks before saving.

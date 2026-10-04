@@ -18,18 +18,21 @@ type Capabilities struct {
 var LegacyXML = Capabilities{HTTP: true, MP3: true, AAC: true, ICY: true}
 
 type Station struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	URL      string `json:"-"`
-	StreamID string `json:"stream_id"`
-	Codec    string `json:"codec"`
-	Bitrate  int    `json:"bitrate_kbps"`
-	RBUUID   string `json:"radio_browser_uuid,omitempty"`
-	Source   string `json:"source"`
-	Country  string `json:"country"`
-	Tags     string `json:"tags"`
-	Language string `json:"language"`
-	HLS      bool   `json:"hls"`
+	Homepage  string          `json:"homepage,omitempty"`
+	VariantID string          `json:"-"`
+	Variants  []StreamVariant `json:"streams,omitempty"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	URL       string          `json:"-"`
+	StreamID  string          `json:"stream_id"`
+	Codec     string          `json:"codec"`
+	Bitrate   int             `json:"bitrate_kbps"`
+	RBUUID    string          `json:"radio_browser_uuid,omitempty"`
+	Source    string          `json:"source"`
+	Country   string          `json:"country"`
+	Tags      string          `json:"tags"`
+	Language  string          `json:"language"`
+	HLS       bool            `json:"hls"`
 }
 type Device struct {
 	ID           string       `json:"id"`
@@ -51,19 +54,22 @@ type Event struct {
 
 // Candidate is cached catalogue information, not yet a managed station.
 type Candidate struct {
-	UUID        string `json:"stationuuid"`
-	Name        string `json:"name"`
-	URL         string `json:"url"`
-	Resolved    string `json:"url_resolved"`
-	Codec       string `json:"codec"`
-	Bitrate     int    `json:"bitrate"`
-	Country     string `json:"country"`
-	CountryCode string `json:"countrycode"`
-	Language    string `json:"language"`
-	Tags        string `json:"tags"`
-	HLS         int    `json:"hls"`
+	Homepage    string      `json:"homepage"`
+	Variants    []Candidate `json:"variants,omitempty"`
+	UUID        string      `json:"stationuuid"`
+	Name        string      `json:"name"`
+	URL         string      `json:"url"`
+	Resolved    string      `json:"url_resolved"`
+	Codec       string      `json:"codec"`
+	Bitrate     int         `json:"bitrate"`
+	Country     string      `json:"country"`
+	CountryCode string      `json:"countrycode"`
+	Language    string      `json:"language"`
+	Tags        string      `json:"tags"`
+	HLS         int         `json:"hls"`
 }
 type Health struct {
+	VariantID   string    `json:"variant_id,omitempty"`
 	Adaptive    string    `json:"adaptive,omitempty"`
 	StationID   string    `json:"station_id"`
 	Checked     time.Time `json:"checked_at"`

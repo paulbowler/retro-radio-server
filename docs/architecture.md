@@ -23,7 +23,7 @@ Registration hashes the opaque protocol identifier. An incoming request identifi
 
 Radio-Browser mirrors use forward/reverse DNS discovery with fallback hosts. Searches combine name, country and tag filters, with 24 results per page and bounded offsets. Query results and candidates are cached separately from the library, retaining at most 128 searches and 2,000 candidates. Offline results are labelled in plain language.
 
-Popular discovery caches background jobs by country and directory offset, up to eight jobs with bounded lifetimes. Checks run in batches of four; usable results are progressively rendered through HTMX, retaining ranking and returning up to 24 stations per page. Pagination retains exact directory cursors so skipped unavailable streams do not create gaps when returning to earlier pages. Each library addition performs its own live check before saving; a discovery check does not bypass admission.
+Popular discovery caches background jobs by country and distinct-channel offset, up to eight jobs with bounded lifetimes. Checks run in batches of four; usable results are progressively rendered through HTMX, retaining ranking and returning up to 24 stations per page. Pagination retains exact channel cursors so skipped unavailable streams do not create gaps when returning to earlier pages. Each library addition performs its own live check before saving; a discovery check does not bypass admission.
 
 A single Go template renders station cards across discovery, search, library and radio views. Context determines Add, Remove or favourite controls. The persistent shell loads page fragments, preserves normal URLs and supports non-HTMX forms. Destructive library actions use styled confirmations; result dialogs report additions. Technical activity remains available in the support report.
 
@@ -42,3 +42,9 @@ HLS and DASH are decoded by FFmpeg into continuous 128 kbps MP3, 44.1 kHz stereo
 An optional management password protects the web interface, REST API and support report. Browser writes reject cross-origin submissions. Radio endpoints remain unauthenticated for compatibility. Directory identifiers are spoofable and playback IDs are bearer URLs: this is a trusted-LAN service, not a multi-tenant public proxy. Remote management requires operator-provided network protection.
 
 Audio checks record timestamps, connection metadata and last success without downloading a whole stream. They establish receipt of audio, not physical-radio decoding. Later failures do not remove saved stations.
+
+## Channels and audio alternatives
+
+Schema 6 stores stream alternatives, UUID aliases, old preset/stream aliases and per-radio audio preferences. Existing stations are consolidated only when normalized name, country and website or stream host establish a match; language and programme distinctions are retained. Custom stations remain independent. Favourite membership is unioned when channels merge. The migration is transactional.
+
+Catalogue pages assemble a bounded prefix of cached directory pages and group before applying UI offsets, so pages contain 24 distinct channels. Library admission probes up to 16 compatible alternatives, four at a time within 90 seconds, and saves only working playable streams. Playback checks capabilities, recent failures, direct/adaptive delivery and estimated codec/bitrate quality. Multi-stream channels always use the relay so startup failures can fall back before headers/audio are committed. Once playback starts, a change of codec requires reconnecting. Radio-specific overrides change the first attempted stream, retaining fallback.

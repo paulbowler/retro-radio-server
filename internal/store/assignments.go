@@ -22,6 +22,12 @@ func (s *Store) migrateV3() error {
 
 // Assign keeps favourite status independent of membership. Existing favourites survive re-adds.
 func (s *Store) Assign(device, station string, favourite bool) error {
+	channel, err := s.Station(station, false)
+	if err != nil {
+		return err
+	}
+	station = channel.ID
+
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err

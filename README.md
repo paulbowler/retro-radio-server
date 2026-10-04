@@ -8,6 +8,7 @@ Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, in
 
 - Radio-Browser discovery, name search, country and genre filters.
 - Live-checked popular stations in your selected country, loaded progressively with 24 stations per page. Search and library lists also use 24 stations per page.
+- One channel per station, with conservatively matched stream alternatives. Automatic audio selection and startup fallback, plus optional audio choices per radio.
 - A shared station library available to every radio, with individual favourites.
 - Custom stations from public listening links, with automatic audio detection.
 - Radio menus for all stations, country, genre, favourites and search.
@@ -123,3 +124,7 @@ Issues and pull requests are welcome. For hardware reports, include the model, f
 GPL-3.0-only; see [LICENSE](LICENSE). Bundled HTMX retains its [BSD licence](internal/web/static/HTMX-LICENSE). Go dependencies and checksums are recorded in `go.mod` and `go.sum`.
 
 KIMB Radio-API, WiFi-RadioAPI, LibreFrontier, YCast and YTuner were studied for interoperability behaviour without porting their source or adding runtime dependencies. Radio-Browser integration follows its [official API documentation](https://docs.radio-browser.info/).
+
+Audio alternatives are grouped when the station name and country match and the website or stream host supports the match. Technical codec/bitrate suffixes are removed from names; programme and regional names remain distinct. Automatic playback prefers compatible direct streams and estimates quality from codec and bitrate, placing recently failed streams last. Channels with alternatives use a stable server playback address and try another stream if connection, status or initial audio fails. A format change requires a new playback connection once audio has started. Audio options on a radio let you override the first choice; fallback still applies. Existing library stations acquire newly discovered working alternatives during their automatic checks.
+
+Database schema 6 preserves alternatives and combines favourites for confirmed duplicates. Old station and stream addresses remain aliases. Back up the persistent `/data` directory before upgrading.

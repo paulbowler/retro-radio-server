@@ -46,12 +46,12 @@ func literalIP(host string) error {
 	return nil
 }
 func (p *Relay) Check(ctx context.Context, s model.Station) (model.Health, error) {
-	return p.check(ctx, s, true)
+	return p.probeChannel(ctx, s, true)
 }
 
 // Probe tests an unsaved station without writing library or health records.
 func (p *Relay) Probe(ctx context.Context, s model.Station) (model.Health, error) {
-	return p.check(ctx, s, false)
+	return p.probeChannel(ctx, s, false)
 }
 func (p *Relay) check(ctx context.Context, s model.Station, persist bool) (model.Health, error) {
 	save := func(h model.Health) error {
@@ -62,7 +62,7 @@ func (p *Relay) check(ctx context.Context, s model.Station, persist bool) (model
 	}
 	ctx, cancel := context.WithTimeout(ctx, 35*time.Second)
 	defer cancel()
-	h := model.Health{StationID: s.ID, Checked: time.Now().UTC(), Codec: s.Codec, Bitrate: s.Bitrate}
+	h := model.Health{StationID: s.ID, VariantID: s.VariantID, Checked: time.Now().UTC(), Codec: s.Codec, Bitrate: s.Bitrate}
 	if old, e := p.Store.Health(s.ID); e == nil {
 		h.LastSuccess = old.LastSuccess
 	}

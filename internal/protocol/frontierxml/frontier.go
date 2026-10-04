@@ -110,7 +110,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err == nil {
 				var play string
 				health, _ := h.Store.Health(s.ID)
-				play, err = delivery.PlayURL(h.Base, s, d.Capabilities, health)
+				if len(s.Variants) > 1 {
+					play, s, err = delivery.RadioPlayURL(h.Base, s, d, h.Store.Preferred(d.ID, s.ID))
+				} else {
+					play, err = delivery.PlayURL(h.Base, s, d.Capabilities, health)
+				}
 				if err == nil {
 					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(""), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
 					count = 1
