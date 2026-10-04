@@ -78,6 +78,8 @@ Search uses the [Apple podcast catalogue](https://developer.apple.com/library/ar
 docker compose up -d --build
 ```
 
+If a build stops with `compile: signal: killed`, the compiler may have run out of memory. The Docker build compiles packages one at a time and uses more frequent garbage collection to reduce its memory demand. Pull the latest code and retry `docker compose up -d --build`. If it still fails, check the host’s out-of-memory logs and increase the memory available to Docker or build on a larger machine. These settings apply only while building; the running server uses its normal settings.
+
 The database lives in a persistent Docker volume. Keep that volume when rebuilding; `docker compose down -v` deletes its data. Back up SQLite with the service stopped or through SQLite’s backup API. For a Linux bind mount instead of the named volume, the data directory must be writable by UID/GID `10001:10001`.
 
 ## Configuration

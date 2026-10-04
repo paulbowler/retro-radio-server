@@ -3,7 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /retro-radio ./cmd/retro-radio
+# Compile one package at a time and collect garbage more frequently on small hosts.
+# GOMEMLIMIT is a soft target for each Go build process, not a container RAM cap.
+RUN CGO_ENABLED=0 GOMAXPROCS=2 GOGC=20 GOMEMLIMIT=512MiB go build -p 1 -trimpath -ldflags='-s -w' -o /retro-radio ./cmd/retro-radio
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates ffmpeg && addgroup -g 10001 retro && adduser -D -u 10001 -G retro retro && mkdir /data && chown retro:retro /data
