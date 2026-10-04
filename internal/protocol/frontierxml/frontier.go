@@ -24,6 +24,7 @@ var route = regexp.MustCompile(`(?i)^/setupapp/([a-z0-9_-]+)/asp/browsexml/([a-z
 var identifier = regexp.MustCompile(`^[a-zA-Z0-9_-]{8,128}$`)
 
 type Item struct {
+	Type        string `xml:"ItemType"`
 	ShowID      string `xml:"ShowOnDemandID,omitempty"`
 	ShowTitle   string `xml:"ShowOnDemandName,omitempty"`
 	ShowURL     string `xml:"ShowOnDemandURL,omitempty"`
@@ -36,7 +37,6 @@ type Item struct {
 	ShowMime    string `xml:"ShowMime,omitempty"`
 	ShowFormat  string `xml:"ShowFormat,omitempty"`
 
-	Type           string  `xml:"ItemType"`
 	Title          string  `xml:"Title,omitempty"`
 	Dir            string  `xml:"UrlDir,omitempty"`
 	Backup         string  `xml:"UrlDirBackUp,omitempty"`

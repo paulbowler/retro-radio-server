@@ -49,7 +49,7 @@ func TestPodcastMenuEpisodesAndLookup(t *testing.T) {
 		t.Fatal(shows)
 	}
 	first := get("navXML.asp?podcast=" + p.ID + "&startItems=1&endItems=24")
-	if first.Count != 30 || len(first.Items) != 25 || first.Items[1].EpisodeName != "Episode 0" {
+	if first.Count != 30 || len(first.Items) != 25 || first.Items[1].EpisodeName != "Episode 0" || first.Items[1].EpisodeURL == "" || first.Items[1].ShowMime != "MP3" {
 		t.Fatal(first)
 	}
 	second := get("navXML.asp?podcast=" + p.ID + "&startItems=25&endItems=48")
@@ -59,5 +59,50 @@ func TestPodcastMenuEpisodesAndLookup(t *testing.T) {
 	lookup := get("Search.asp?sSearchtype=5&Search=" + first.Items[1].EpisodeID)
 	if lookup.Count != 1 || lookup.Items[1].EpisodeURL != h.Base+"/episode/"+first.Items[1].EpisodeID || lookup.Items[1].ShowMime != "MP3" || lookup.Items[1].ShowName != p.Title {
 		t.Fatal(lookup)
+	}
+}
+
+// Check wire order independently of Item unmarshalling: a streaming firmware
+// parser can discard fields encountered before it knows the item type.
+func TestPodcastWireFieldOrder(t *testing.T) {
+	cases := []struct {
+		item   Item
+		fields []string
+	}{
+		{Item{Type: "ShowOnDemand", ShowID: "P1", ShowTitle: "History & Talk", ShowURL: "http://radio.local/episodes?podcast=P1", ShowBackup: "http://radio.local/episodes?podcast=P1"}, []string{"ItemType", "ShowOnDemandID", "ShowOnDemandName", "ShowOnDemandURL", "ShowOnDemandURLBackUp", "BookmarkShow"}},
+		{episodeItem("http://radio.local", model.Episode{ID: "P1X1", Title: "Episode", Codec: "MP3", Description: strings.Repeat("é", 1000)}, model.Podcast{Title: "History & Talk"}, true), []string{"ItemType", "ShowEpisodeID", "ShowName", "Logo", "ShowEpisodeName", "ShowEpisodeURL", "BookmarkShow", "ShowDesc", "ShowFormat", "Lang", "Country", "ShowMime"}},
+	}
+	for _, c := range cases {
+		raw, e := xml.Marshal(c.item)
+		if e != nil {
+			t.Fatal(e)
+		}
+		decoder := xml.NewDecoder(strings.NewReader(string(raw)))
+		fields := []string{}
+		depth := 0
+		for {
+			token, e := decoder.Token()
+			if e != nil {
+				break
+			}
+			switch token := token.(type) {
+			case xml.StartElement:
+				depth++
+				if depth == 2 {
+					fields = append(fields, token.Name.Local)
+				}
+			case xml.EndElement:
+				depth--
+			}
+		}
+		if strings.Join(fields, ",") != strings.Join(c.fields, ",") {
+			t.Fatalf("wire fields %v; want %v\n%s", fields, c.fields, raw)
+		}
+		if !strings.Contains(string(raw), "History &amp; Talk") {
+			t.Fatal("show title not escaped")
+		}
+		if c.item.Type == "ShowEpisode" && (len([]rune(c.item.ShowDesc)) > 267 || !strings.Contains(string(raw), "<ShowMime>MP3</ShowMime>")) {
+			t.Fatal("unbounded or incomplete episode", string(raw))
+		}
 	}
 }

@@ -12,6 +12,9 @@ func episodeItem(base string, ep model.Episode, p model.Podcast, full bool) Item
 	if full {
 		item.EpisodeURL = base + "/episode/" + ep.ID
 		item.ShowDesc = ep.Description
+		if description := []rune(item.ShowDesc); len(description) > 256 {
+			item.ShowDesc = "[truncated]" + string(description[:256])
+		}
 		item.ShowMime = ep.Codec
 		item.ShowFormat = "Podcast"
 		item.Logo = text("")
@@ -45,7 +48,7 @@ func (h *Handler) podcastItems(base string, q url.Values) ([]Item, int, error) {
 			return nil, 0, e
 		}
 		for _, ep := range episodes {
-			entries = append(entries, episodeItem(h.Base, ep, p, false))
+			entries = append(entries, episodeItem(h.Base, ep, p, true))
 		}
 	} else {
 		items[0] = Item{Type: "Previous", Previous: base + "loginXML.asp?gofile=", PreviousBackup: base + "loginXML.asp?gofile="}
