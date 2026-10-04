@@ -18,6 +18,9 @@ func TestEpisodeRelayHTTPSRangeAndHead(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer db.DB.Close()
+	if e = db.SaveSettings(store.Settings{BufferSeconds: 10, AutoReconnect: true, Quality: "low"}); e != nil {
+		t.Fatal(e)
+	}
 	p, e := db.SavePodcast(model.Podcast{Title: "Show", Feed: "https://feeds.example.org"}, []model.Episode{{GUID: "first", Title: "Episode", URL: "http://audio.example.org/one.mp3", Codec: "MP3"}})
 	if e != nil {
 		t.Fatal(e)

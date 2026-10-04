@@ -16,7 +16,7 @@ func (a *App) podcastView(r *http.Request, v *view) {
 		v.Message = "Couldn’t load your podcasts. Please try again."
 		return
 	}
-	v.Country, _ = listenerCountry(r)
+	v.Country, _ = a.listenerCountry(r)
 	if v.Country == "" {
 		v.Country = "GB"
 	}

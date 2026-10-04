@@ -64,6 +64,14 @@ func RankedStreams(s model.Station, c model.Capabilities, preferred string) []mo
 		if tier(a) != tier(b) {
 			return tier(a) < tier(b)
 		}
+		if preferred == "low-data" {
+			if (a.Bitrate > 0) != (b.Bitrate > 0) {
+				return a.Bitrate > 0
+			}
+			if a.Bitrate != b.Bitrate {
+				return a.Bitrate < b.Bitrate
+			}
+		}
 		if quality(a) != quality(b) {
 			return quality(a) > quality(b)
 		}
@@ -133,6 +141,9 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		}
 		caps = d.Capabilities
 		preferred = p.Store.Preferred(device, s.ID)
+	}
+	if preferred == "" && p.Store.Settings().Quality == "low" {
+		preferred = "low-data"
 	}
 	last := errors.New("no compatible audio stream")
 	for _, v := range RankedStreams(s, caps, preferred) {

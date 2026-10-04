@@ -58,3 +58,9 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 
 /* Selected navigation keeps dark text against cyan in every interaction state. */
 #navigation a[aria-current=page],#navigation a[aria-current=page]:hover,#navigation a[aria-current=page]:focus-visible,#navigation a[aria-current=page]:active{background:var(--green);color:#08131a}
+
+.settings-cog{margin-left:auto;display:grid;place-items:center;padding:9px;flex:none}.settings-cog svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round}.preferences-modal{max-height:calc(100dvh - 32px);overflow:auto}.preferences-modal input[type=range]{width:100%;accent-color:var(--green);padding:0}.preferences-modal select{width:100%}.preferences-modal .setting-hint{font-size:12px;margin:6px 0 18px}.preferences-modal label{font-size:14px}.preferences-modal .setting-switch{flex-direction:row;align-items:center;gap:10px}.setting-switch input{accent-color:var(--green);width:18px;height:18px}.preferences-modal output{color:var(--green)}
+
+.preferences-modal .modal-actions{position:sticky;bottom:-28px;padding:14px 0;margin:12px 0 -14px;background:#140e23}.preferences-modal h2{margin-top:0}.preferences-modal .setting-hint{margin-bottom:14px}
+
+@media(max-width:360px){aside{gap:8px;padding:10px 12px}.brand img{width:44px;height:44px}.settings-cog{padding:7px}aside nav a{padding:7px 6px}}

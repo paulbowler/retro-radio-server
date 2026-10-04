@@ -130,7 +130,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			s, err = h.Store.Station(q.Get("Search"), false)
 			if err == nil {
 				var play string
-				play, s, err = delivery.RadioPlayURL(h.Base, s, d, h.Store.Preferred(d.ID, s.ID))
+				preferred := h.Store.Preferred(d.ID, s.ID)
+				if preferred == "" && h.Store.Settings().Quality == "low" {
+					preferred = "low-data"
+				}
+				play, s, err = delivery.RadioPlayURL(h.Base, s, d, preferred)
 				if err == nil {
 					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(h.Base + "/artwork/" + s.ID + ".jpg"), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
 					count = 1

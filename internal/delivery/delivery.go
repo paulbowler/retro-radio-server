@@ -267,6 +267,12 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 		p.serveAdaptive(w, r, s, kind)
 		return
 	}
+	settings := p.Store.Settings()
+	live := (s.ID != "" || s.RBUUID != "") && r.Method == "GET" && r.Header.Get("Range") == "" && res.StatusCode == 200 && res.Header.Get("Content-Length") == ""
+	if live && (settings.BufferSeconds > 0 || settings.AutoReconnect) {
+		p.serveBufferedLive(w, r, s, res.Body, res.Header, settings, p.reopenLive(s))
+		return
+	}
 	defer res.Body.Close()
 	stripMetadata := res.Header.Get("Icy-MetaInt") != "" && r.Header.Get("Icy-MetaData") != "1"
 	if stripMetadata && newICYObserver(res.Header.Get("Icy-MetaInt"), func(string) {}) == nil {

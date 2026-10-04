@@ -410,6 +410,18 @@ func (p *Relay) serveAdaptive(w http.ResponseWriter, r *http.Request, s model.St
 		http.Error(w, "adaptive stream unavailable", 502)
 		return
 	}
+	settings := p.Store.Settings()
+	if settings.BufferSeconds > 0 || settings.AutoReconnect {
+		playing := s
+		playing.Codec = "MP3"
+		playing.Bitrate = 128
+		headers := http.Header{"Content-Type": {"audio/mpeg"}, "Icy-Br": {"128"}, "Icy-Name": {s.Name}, "X-Retro-Adaptive": {"1"}}
+		p.serveBufferedLive(w, r, playing, audio, headers, settings, func(ctx context.Context) (io.ReadCloser, http.Header, error) {
+			next, err := p.openAdaptive(ctx, s.URL, kind)
+			return next, headers, err
+		})
+		return
+	}
 	defer audio.Close()
 	playing := s
 	playing.Codec = "MP3"

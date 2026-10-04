@@ -45,6 +45,9 @@ func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	country, _ := listenerCountry(r)
+	if a.Store != nil {
+		country, _ = a.listenerCountry(r)
+	}
 	if _, explicit := r.URL.Query()["country"]; explicit && selected == "" {
 		country = ""
 	}

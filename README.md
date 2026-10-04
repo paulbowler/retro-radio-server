@@ -96,6 +96,17 @@ The database lives in a persistent Docker volume. Keep that volume when rebuildi
 
 This is a **trusted home-network service**. Management Basic authentication uses HTTP unless you provide a TLS terminator or VPN. Radio endpoints cannot require management credentials. Keep the radio’s HTTP access available and do not expose the service as a public internet proxy. Local `.env` files, databases and backups are excluded from Git.
 
+## App settings
+
+The cog in the header opens shared settings for every radio. The logo returns to the dashboard.
+
+- **Playback buffer:** 0–10 seconds of live audio held ahead of playback. Larger values add tuning delay and can smooth short connection drops. The duration is estimated from the station’s bitrate, so variable or unknown bitrates can differ. Zero keeps immediate playback.
+- **Automatically reconnect:** retries the same live stream after a disconnect or stall, keeping the radio connection open for up to roughly a minute of retries. A buffer can cover short interruptions; longer outages can still pause playback. Reconnecting joins the current live broadcast and may skip content missed during the outage.
+- **Audio quality:** Auto chooses the usual compatible stream; Lower data use favours a lower known bitrate when alternatives are available. Availability and compatibility still take priority.
+- **Default country:** sets the starting country for discovery. Explicit search filters take precedence; Automatic uses the browser’s regional settings.
+
+Preferences are stored in the database and apply to new listening sessions. Defaults retain immediate playback, automatic quality and automatic country; reconnection starts off. Live MP3/AAC and converted HLS/DASH use the buffer. Podcast downloads and byte-range requests retain normal delivery and seeking. Buffer memory is bounded per listener, and song information is delivered alongside the buffered audio.
+
 ## Audio delivery
 
 Direct MP3 and AAC streams can play on the default radio profile. HTTPS audio is delivered through a local HTTP relay when necessary. HTTP listening links are tried over verified HTTPS first, with fallback to the original HTTP origin when HTTPS is unavailable. Broadcaster-specific rules are not required.

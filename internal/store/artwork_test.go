@@ -17,7 +17,7 @@ func TestArtworkMigrationPreservesLibraryAndFavourites(t *testing.T) {
 	s.Favourite(d.ID, "1001", true)
 	uuid := "11111111-1111-1111-1111-111111111111"
 	s.CachePut("fixture", []model.Candidate{{UUID: uuid, Favicon: "https://example.com/logo.png"}})
-	if _, err = s.DB.Exec(`UPDATE stations SET rb_uuid=? WHERE id='1001'; ALTER TABLE stations DROP COLUMN favicon; DELETE FROM schema_migrations WHERE version=8`, uuid); err != nil {
+	if _, err = s.DB.Exec(`UPDATE stations SET rb_uuid=? WHERE id='1001'; ALTER TABLE stations DROP COLUMN favicon; DELETE FROM schema_migrations WHERE version>=8`, uuid); err != nil {
 		t.Fatal(err)
 	}
 	s.DB.Close()

@@ -121,6 +121,7 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
+	Settings                                    store.Settings
 	DiscoveryID                                 string
 	DiscoveryCursor                             int
 	Radios                                      []radioOverview
@@ -192,6 +193,8 @@ func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /", a.screen)
+	mux.HandleFunc("GET /preferences", a.preferences)
+	mux.HandleFunc("POST /preferences", a.savePreferences)
 	mux.HandleFunc("GET /stations/results", a.search)
 	mux.HandleFunc("GET /stations/card", a.refreshCard)
 	mux.HandleFunc("GET /stations/listen", a.listenCandidate)
@@ -248,11 +251,11 @@ func (a *App) Handler() http.Handler {
 			http.Error(w, "Radio not found", 404)
 			return
 		}
-		health, _ := a.Store.Health(s.ID)
-		play, e := delivery.PlayURL(a.Base, s, d.Capabilities, health)
-		if len(s.Variants) > 1 {
-			play, _, e = delivery.RadioPlayURL(a.Base, s, d, a.Store.Preferred(d.ID, s.ID))
+		preferred := a.Store.Preferred(d.ID, s.ID)
+		if preferred == "" && a.Store.Settings().Quality == "low" {
+			preferred = "low-data"
 		}
+		play, _, e := delivery.RadioPlayURL(a.Base, s, d, preferred)
 		if e != nil {
 			http.Error(w, e.Error(), 422)
 			return
@@ -301,6 +304,9 @@ func (a *App) baseView(r *http.Request) (view, error) {
 func (a *App) stationCard(s model.Station, v view) card {
 	h, _ := a.Store.Health(s.ID)
 	preferred := a.Store.Preferred(v.Selected, s.ID)
+	if preferred == "" && a.Store.Settings().Quality == "low" {
+		preferred = "low-data"
+	}
 	caps := model.LegacyXML
 	if d, err := a.Store.Device(v.Selected); err == nil {
 		caps = d.Capabilities
@@ -473,7 +479,7 @@ func (a *App) searchView(r *http.Request, v *view) {
 	if _, explicit := r.URL.Query()["country"]; explicit || v.Mode == "library" || v.Query != "" {
 		v.Country = strings.ToUpper(r.URL.Query().Get("country"))
 	} else {
-		v.Country, v.CountryAutomatic = listenerCountry(r)
+		v.Country, v.CountryAutomatic = a.listenerCountry(r)
 	}
 	if (v.Country != "" && !validCountry(v.Country)) || len(v.Genre) > 100 {
 		v.Error = true
