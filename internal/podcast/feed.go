@@ -178,7 +178,7 @@ func Parse(data []byte, base string) (model.Podcast, []model.Episode, error) {
 			if len(duration) > 20 {
 				duration = ""
 			}
-			out = append(out, model.Episode{GUID: guid, Title: title, Description: plain(desc, 800), URL: raw, Codec: format, Published: published, Duration: duration})
+			out = append(out, model.Episode{GUID: guid, Title: title, Description: plain(desc, 6000), URL: raw, Codec: format, Published: published, Duration: duration})
 			break
 		}
 		if len(out) >= 200 {
