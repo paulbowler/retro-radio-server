@@ -38,3 +38,5 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 .podcast-remove{color:#ff80bd}.podcast-remove:hover{color:#ffacd5;background:#351329}
 
 .entry-modal label{display:block;margin:20px 0 8px}.entry-modal input{width:100%}.entry-modal .modal-actions{margin-top:24px}
+
+.podcast-library-card{height:360px;display:flex;flex-direction:column;gap:12px}.podcast-library-card .section-heading{align-items:flex-start;flex-wrap:nowrap;gap:10px}.podcast-library-card .section-heading h3{flex:1;min-width:0;margin:0;max-height:3.9em;overflow-y:auto}.podcast-library-card .section-heading form{flex-shrink:0}.podcast-library-card>.muted{margin:0;max-height:3.2em;overflow-y:auto}.podcast-library-card .podcast-description{flex:1;min-height:0;margin:0;overflow-y:auto;overflow-wrap:anywhere;scrollbar-width:thin;padding-right:8px}.podcast-library-card>.button{align-self:flex-start;flex-shrink:0}.podcast-description:focus-visible{outline:2px solid var(--green);outline-offset:4px}

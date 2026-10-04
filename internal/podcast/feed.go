@@ -118,7 +118,7 @@ func Parse(data []byte, base string) (model.Podcast, []model.Episode, error) {
 	}
 	p.Title = plain(p.Title, 200)
 	p.Author = plain(p.Author, 160)
-	p.Description = plain(p.Description, 500)
+	p.Description = plain(p.Description, 6000)
 	if p.Title == "" {
 		return p, nil, errors.New("feed has no title")
 	}
