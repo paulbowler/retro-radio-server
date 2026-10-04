@@ -8,7 +8,7 @@ Updated 4 October 2026.
 - SQLite migrations preserving devices, stations and individual favourites.
 - A shared library available to all radios, with country and genre menus.
 - Radio-Browser discovery, 24-result search pagination, combined filters and bounded offline caching.
-- Progressive discovery of up to 12 usable popular stations in the selected country.
+- Progressive discovery of 24 usable popular stations per page in the selected country, with pagination above and below discovery, search and library lists.
 - Custom station creation and editing with automatic audio detection and checks before saving.
 - HTTP/HTTPS negotiation and checked audio relays, plus FFmpeg conversion of HLS/DASH to MP3.
 - An HTMX interface with Dashboard, Stations, Radios, Activity and Help; plain-language feedback and styled confirmations.

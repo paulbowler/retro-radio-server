@@ -442,13 +442,13 @@ func TestDiscoveryChecksGateAdditionWithoutSaving(t *testing.T) {
 	}
 }
 
-func TestDashboardKeepsTwelveMostPopularUsableStations(t *testing.T) {
+func TestDiscoveryPagesKeepTwentyFourUsableStations(t *testing.T) {
 	s, err := store.Open(filepath.Join(t.TempDir(), "usable.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.DB.Close()
-	entries := make([]model.Candidate, 36)
+	entries := make([]model.Candidate, 64)
 	for i := range entries {
 		entries[i] = model.Candidate{UUID: fmt.Sprintf("11111111-1111-1111-1111-%012d", i), Name: fmt.Sprintf("Station %d", i), Resolved: fmt.Sprintf("https://1.1.1.1/audio?id=%d", i), Codec: "MP3"}
 	}
@@ -483,8 +483,31 @@ func TestDashboardKeepsTwelveMostPopularUsableStations(t *testing.T) {
 	w = httptest.NewRecorder()
 	app.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/dashboard/discoveries?country=GB", nil))
 	body := w.Body.String()
-	if w.Code != 200 || strings.Count(body, "<article") != 12 || !strings.Contains(body, "<h3>Station 14</h3>") || !strings.Contains(body, "<h3>Station 25</h3>") || strings.Contains(body, "<h3>Station 13</h3>") || strings.Contains(body, "<h3>Station 26</h3>") || strings.Contains(body, " disabled") || strings.Contains(body, "hx-trigger=\"load\"") {
+	if w.Code != 200 || strings.Count(body, "<article") != 24 || !strings.Contains(body, "<h3>Station 14</h3>") || !strings.Contains(body, "<h3>Station 37</h3>") || strings.Contains(body, "<h3>Station 13</h3>") || strings.Contains(body, "<h3>Station 38</h3>") || strings.Contains(body, `class="pill secondary" disabled`) || strings.Contains(body, "hx-trigger=\"load\"") {
 		t.Fatal("incorrect usable directory selection", w.Code, body)
+	}
+	if strings.Count(body, `aria-label="Station pages"`) != 2 || !strings.Contains(body, "offset=38") || !strings.Contains(body, "trail=0") {
+		t.Fatal("discovery pager or cursor missing")
+	}
+	requestPage := func(path, key string) string {
+		w := httptest.NewRecorder()
+		app.Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		select {
+		case <-app.discoveriesJobs[key].done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("page checks did not finish")
+		}
+		w = httptest.NewRecorder()
+		app.Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		return w.Body.String()
+	}
+	page2 := requestPage("/stations/discoveries?country=GB&offset=38&trail=0", "GB:38")
+	if strings.Count(page2, "<article") != 24 || !strings.Contains(page2, "<h3>Station 38</h3>") || !strings.Contains(page2, "<h3>Station 61</h3>") || strings.Contains(page2, "<h3>Station 37</h3>") || !strings.Contains(page2, "Page 2") {
+		t.Fatal("stations skipped or duplicated between usable pages")
+	}
+	last := requestPage("/stations/discoveries?country=GB&offset=62&trail=0,38", "GB:62")
+	if strings.Count(last, "<article") != 2 || !strings.Contains(last, "<h3>Station 63</h3>") || !strings.Contains(last, "offset=38") || !strings.Contains(last, "Page 3") || strings.Contains(last, ">Next →</a>") {
+		t.Fatal("last page or back cursor incorrect")
 	}
 	stations, err := s.Stations("")
 	if err != nil || len(stations) != 1 {
@@ -607,7 +630,7 @@ func TestStationDiscoveryLocationAndLibraryFilters(t *testing.T) {
 				t.Fatal("discovery still on dashboard")
 			}
 		case "/stations":
-			if !strings.Contains(body, `hx-get="/stations/discoveries"`) || !strings.Contains(body, `name="genre"`) {
+			if !strings.Contains(body, `hx-get="/stations/discoveries?`) || !strings.Contains(body, `name="genre"`) {
 				t.Fatal("missing station discovery or filters")
 			}
 		default:

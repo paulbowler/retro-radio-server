@@ -7,7 +7,7 @@ Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, in
 ## Features
 
 - Radio-Browser discovery, name search, country and genre filters.
-- Up to 12 live-checked popular stations in your selected country, loaded progressively; searches return 24 results per page.
+- Live-checked popular stations in your selected country, loaded progressively with 24 stations per page. Search and library lists also use 24 stations per page.
 - A shared station library available to every radio, with individual favourites.
 - Custom stations from public listening links, with automatic audio detection.
 - Radio menus for all stations, country, genre, favourites and search.

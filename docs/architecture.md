@@ -23,7 +23,7 @@ Registration hashes the opaque protocol identifier. An incoming request identifi
 
 Radio-Browser mirrors use forward/reverse DNS discovery with fallback hosts. Searches combine name, country and tag filters, with 24 results per page and bounded offsets. Query results and candidates are cached separately from the library, retaining at most 128 searches and 2,000 candidates. Offline results are labelled in plain language.
 
-Popular discovery uses country-specific background jobs, up to eight cached jobs with bounded lifetimes. Checks run in batches of four; usable results are progressively rendered through HTMX, retaining ranking and returning up to 12 stations. Each library addition performs its own live check before saving; a discovery check does not bypass admission.
+Popular discovery caches background jobs by country and directory offset, up to eight jobs with bounded lifetimes. Checks run in batches of four; usable results are progressively rendered through HTMX, retaining ranking and returning up to 24 stations per page. Pagination retains exact directory cursors so skipped unavailable streams do not create gaps when returning to earlier pages. Each library addition performs its own live check before saving; a discovery check does not bypass admission.
 
 A single Go template renders station cards across discovery, search, library and radio views. Context determines Add, Remove or favourite controls. The persistent shell loads page fragments, preserves normal URLs and supports non-HTMX forms. Destructive library actions use styled confirmations; result dialogs report additions. Technical activity remains available in the support report.
 

@@ -99,6 +99,9 @@ type view struct {
 	Results                                     catalogue.Result
 	Candidates                                  []candidateCard
 	Mode, Genre, PreviousURL, NextURL           string
+	DiscoveryURL, Trail                         string
+	PageNumber                                  int
+	HasPrevious, HasNext                        bool
 	Genres                                      []string
 	Country                                     string
 	Countries                                   []countryOption
@@ -382,13 +385,24 @@ func (a *App) searchView(r *http.Request, v *view) {
 	}
 	v.Genres = stationGenres(a.Store)
 
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	offset := 0
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		var err error
+		offset, err = strconv.Atoi(raw)
+		if err != nil || offset < 0 || offset > 1000 {
+			v.Error = true
+			v.Message = "This page is unavailable. Start again from the first page."
+			return
+		}
+	}
 	v.Offset = offset
 	v.Next = offset + catalogue.PageSize
 	v.Previous = offset - catalogue.PageSize
 	if v.Previous < 0 {
 		v.Previous = 0
 	}
+	v.Trail = r.URL.Query().Get("trail")
+	setStationPagination(v)
 	if v.Mode == "discover" && v.Query == "" && v.Genre == "" && r.URL.Query().Get("uuid") == "" {
 		return
 	}
@@ -405,8 +419,13 @@ func (a *App) searchView(r *http.Request, v *view) {
 			if !stationMatches(s, v.Query, v.Country, v.Genre) {
 				continue
 			}
+			v.StationCount++
+			if v.StationCount <= offset || len(v.Cards) >= catalogue.PageSize {
+				continue
+			}
 			v.Cards = append(v.Cards, a.stationCard(s, *v))
 		}
+		v.HasNext = v.StationCount > offset+catalogue.PageSize && v.Next <= 1000
 		return
 	}
 	var res catalogue.Result
@@ -425,11 +444,8 @@ func (a *App) searchView(r *http.Request, v *view) {
 	} else {
 		res, e = a.Catalogue.SearchFiltered(r.Context(), v.Query, v.Country, v.Genre, offset)
 	}
-	params := url.Values{"q": {v.Query}, "country": {v.Country}, "genre": {v.Genre}, "mode": {v.Mode}}
-	params.Set("offset", strconv.Itoa(v.Previous))
-	v.PreviousURL = "?" + params.Encode()
-	params.Set("offset", strconv.Itoa(v.Next))
-	v.NextURL = "?" + params.Encode()
+	setStationPagination(v)
+	v.HasNext = res.More && v.Next <= 1000
 	v.Results = res
 	if e != nil {
 		v.Message = "Search is unavailable right now. You can still listen to saved stations."
