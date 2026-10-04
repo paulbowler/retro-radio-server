@@ -210,8 +210,8 @@ func TestReconnectResetsUpstreamMetadataFraming(t *testing.T) {
 	first = append(first, []byte("BBBB")...)
 	second := append([]byte("CCCCCCCC\x01"), []byte("StreamTitle='y';")...)
 	second = append(second, []byte("DDDDDDDD")...)
-	chunks := liveChunks(ctx, io.NopCloser(bytes.NewReader(first)), http.Header{"Icy-MetaInt": {"4"}}, store.Settings{AutoReconnect: true}, 128, func(context.Context) (io.ReadCloser, http.Header, error) {
-		return io.NopCloser(bytes.NewReader(second)), http.Header{"Icy-MetaInt": {"8"}}, nil
+	chunks := liveChunks(ctx, io.NopCloser(bytes.NewReader(first)), http.Header{"Icy-Metaint": {"4"}}, store.Settings{AutoReconnect: true}, 128, func(context.Context) (io.ReadCloser, http.Header, error) {
+		return io.NopCloser(bytes.NewReader(second)), http.Header{"Icy-Metaint": {"8"}}, nil
 	})
 	var audio string
 	var titles []string
