@@ -1,0 +1,21 @@
+services:
+  retro-radio:
+    build: .
+    image: retro-radio:local
+    ports:
+      - "80:8080"
+    environment:
+      RETRO_DB: /data/retro-radio.db
+      RETRO_PUBLIC_URL: ${RETRO_PUBLIC_URL:-http://pure.wifiradiofrontier.com}
+      RETRO_ADMIN_USER: ${RETRO_ADMIN_USER:-admin}
+      RETRO_ADMIN_PASSWORD: ${RETRO_ADMIN_PASSWORD:-}
+      RETRO_CATALOGUE_URL: ${RETRO_CATALOGUE_URL:-}
+    volumes:
+      - retro-data:/data
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  retro-data:

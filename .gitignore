@@ -1,0 +1,14 @@
+/data/
+/backups/
+/retro-radio
+/retro-radio.exe
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.zip
+.DS_Store

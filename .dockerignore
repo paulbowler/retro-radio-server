@@ -1,0 +1,9 @@
+data
+backups
+.git
+.env
+.env.*
+retro-radio
+retro-radio.exe
+*.zip
+.DS_Store
