@@ -569,7 +569,6 @@ func (a *App) rename(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Couldn’t load your saved information. Please try again.", 503)
 		return
 	}
-	v.Message = "Name saved."
 	v.Title = v.Device.Name
 	render(w, "screen", v)
 }

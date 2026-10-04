@@ -340,7 +340,8 @@ func TestLibraryAdmissionWithoutDevices(t *testing.T) {
 		t.Fatal("library admission assigned station")
 	}
 	library := send("GET", "/stations?mode=library", "", false)
-	if !strings.Contains(library.Body.String(), c.Name) || strings.Contains(library.Body.String(), `name="device"`) || strings.Contains(library.Body.String(), ">Favourites</a>") {
+	libraryContent := strings.Split(library.Body.String(), "</main>")[0]
+	if !strings.Contains(libraryContent, c.Name) || strings.Contains(libraryContent, `name="device"`) || strings.Contains(library.Body.String(), ">Favourites</a>") {
 		t.Fatal("device controls in library", library.Body.String())
 	}
 	oldBookmark := send("GET", "/favourites", "", false)

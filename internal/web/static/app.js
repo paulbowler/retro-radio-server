@@ -77,3 +77,51 @@
  localTimes();
  document.addEventListener("htmx:load", localTimes);
 })();
+
+// The dialog stays outside page fragments, so radio navigation can update normally.
+(() => {
+ const dialog = document.getElementById("rename-radio");
+ const form = document.getElementById("rename-radio-form");
+ if (!dialog || !form || !dialog.showModal) return;
+ const name = document.getElementById("rename-radio-name");
+ const error = document.getElementById("rename-radio-error");
+ const busy = () => form.classList.contains("htmx-request");
+ document.addEventListener("click", event => {
+  const trigger = event.target.closest("[data-rename-radio]");
+  if (trigger) {
+   form.elements.device.value = trigger.dataset.renameRadio;
+   name.value = trigger.dataset.radioName;
+   name.setCustomValidity("");
+   error.hidden = true;
+   dialog.showModal();
+   name.focus();
+   name.select();
+  }
+  if (event.target.closest("[data-cancel-rename]") && !busy()) dialog.close();
+ });
+ dialog.addEventListener("cancel", event => { if (busy()) event.preventDefault(); });
+ name.addEventListener("input", () => { name.setCustomValidity(""); error.hidden = true; });
+ form.addEventListener("submit", event => {
+  name.value = name.value.trim();
+  if (!name.value) {
+   event.preventDefault();
+   event.stopImmediatePropagation();
+   name.setCustomValidity("Enter a name for your radio.");
+   name.reportValidity();
+  }
+ }, true);
+ document.addEventListener("htmx:beforeRequest", event => {
+  if (event.detail.elt === form) error.hidden = true;
+  else if (event.detail.target?.id === "content" && dialog.open && !busy()) dialog.close();
+ });
+ document.addEventListener("htmx:afterRequest", event => {
+  if (event.detail.elt !== form) return;
+  if (event.detail.successful) dialog.close();
+  else {
+   error.textContent = event.detail.xhr?.status === 400
+    ? "Enter a shorter name for your radio."
+    : "Couldn’t save the name. Please try again.";
+   error.hidden = false;
+  }
+ });
+})();
