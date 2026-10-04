@@ -4,6 +4,7 @@ package catalogue
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"retroradio.local/server/internal/delivery"
@@ -289,4 +291,139 @@ func (s *Service) Artwork(ctx context.Context, id string) (string, error) {
 	}
 	_ = s.Store.CachePut(key, items)
 	return items[0].Favicon, nil
+}
+
+// ArtworkForStation also resolves older or manually entered stations without a
+// directory UUID. Only an exact stream match or the normal channel identity
+// rules can supply artwork; a matching name alone is insufficient.
+func (s *Service) ArtworkForStation(ctx context.Context, station model.Station) (string, error) {
+	if station.Favicon != "" {
+		return station.Favicon, nil
+	}
+	id := station.RBUUID
+	if id == "" {
+		for _, stream := range station.Variants {
+			if stream.UUID != "" {
+				id = stream.UUID
+				break
+			}
+		}
+	}
+	if id != "" {
+		return s.Artwork(ctx, id)
+	}
+	candidates, _ := s.Store.CachedCandidates()
+	var match *model.Candidate
+	for i := range candidates {
+		c := &candidates[i]
+		exact := sameArtworkStream(station.URL, c.URL) || sameArtworkStream(station.URL, c.Resolved)
+		if !exact && !sameArtworkChannel(station, model.CandidateStation(*c)) {
+			continue
+		}
+		if match == nil || exact {
+			match = c
+		}
+		if exact {
+			break
+		}
+	}
+	if match != nil {
+		if match.Favicon != "" {
+			return match.Favicon, nil
+		}
+		return s.Artwork(ctx, match.UUID)
+	}
+	// The directory URL lookup is bounded and cached, including empty results.
+	key := fmt.Sprintf("artwork-stream:v2:%x", sha256.Sum256([]byte(station.URL)))
+	var items []model.Candidate
+	cached, updated, err := s.Store.Cache(key)
+	if err == nil && time.Since(updated) < 24*time.Hour {
+		_ = json.Unmarshal(cached, &items)
+	} else {
+		for _, raw := range []string{station.URL, artworkAlternateScheme(station.URL)} {
+			if raw == "" {
+				continue
+			}
+			found, e := s.fetch(ctx, "/json/stations/byurl?"+url.Values{"url": {raw}}.Encode())
+			if e != nil {
+				return "", e
+			}
+			items = append(items, found...)
+			if len(found) > 0 {
+				break
+			}
+		}
+		if len(items) == 0 && station.Source != "custom" {
+			found, e := s.fetch(ctx, "/json/stations/search?"+url.Values{"name": {station.Name}, "nameExact": {"true"}, "limit": {"24"}}.Encode())
+			if e != nil {
+				return "", e
+			}
+			items = found
+		}
+		_ = s.Store.CachePut(key, items)
+	}
+	for _, c := range items {
+		if c.Favicon != "" && (sameArtworkStream(station.URL, c.URL) || sameArtworkStream(station.URL, c.Resolved) || sameArtworkChannel(station, model.CandidateStation(c))) {
+			return c.Favicon, nil
+		}
+	}
+	return "", errors.New("station artwork unavailable")
+}
+func artworkAlternateScheme(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	switch u.Scheme {
+	case "https":
+		u.Scheme = "http"
+	case "http":
+		u.Scheme = "https"
+	default:
+		return ""
+	}
+	return u.String()
+}
+func sameArtworkStream(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return a == b || artworkAlternateScheme(a) == b
+}
+
+// Artwork may be shared by regional streams from the same broadcaster, without
+// merging their audio channels. Country/name/language rules still apply.
+func sameArtworkChannel(a, b model.Station) bool {
+	if model.SameChannel(a, b) {
+		return true
+	}
+	parent := artworkPublisher(a.URL)
+	if parent == "" || parent != artworkPublisher(b.URL) {
+		return false
+	}
+	a.URL = b.URL
+	return model.SameChannel(a, b)
+}
+func artworkPublisher(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if _, err := netip.ParseAddr(host); err == nil {
+		return ""
+	}
+	labels := strings.Split(host, ".")
+	if len(labels) < 2 {
+		return ""
+	}
+	n := 2
+	// Be conservative with country-code suffixes (e.g. example.co.uk).
+	if len(labels[len(labels)-1]) == 2 {
+		n = 3
+	}
+	if len(labels) < n {
+		return host
+	}
+	return strings.Join(labels[len(labels)-n:], ".")
 }

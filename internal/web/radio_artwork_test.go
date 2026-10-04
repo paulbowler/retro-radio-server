@@ -12,8 +12,10 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/store"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -85,6 +87,15 @@ func TestRadioArtworkPublicHTTPJPEGAndHEAD(t *testing.T) {
 			t.Fatal(path, w.Code)
 		}
 	}
+	_, err = s.DB.Exec(`UPDATE stations SET favicon='http://1.1.1.1/logo.png'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/artwork/1001.jpg", nil))
+	if w.Code != 200 {
+		t.Fatal("HTTP image was not negotiated to HTTPS", w.Code)
+	}
 	_, err = s.DB.Exec(`UPDATE stations SET favicon='http://127.0.0.1/private'`)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +113,53 @@ func TestRadioJPEGRejectsOversizedAndInvalidImages(t *testing.T) {
 	for _, data := range [][]byte{encoded.Bytes(), []byte("<svg><script>evil</script></svg>"), []byte("not an image")} {
 		if _, err := radioJPEG(data); err == nil {
 			t.Fatal("invalid image accepted")
+		}
+	}
+}
+
+func TestCandidateArtworkAndCardPlaceholder(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "candidate-artwork.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.DB.Close()
+	uuid := "11111111-1111-1111-1111-111111111111"
+	candidate := model.Candidate{UUID: uuid, Name: "Test radio", URL: "https://1.1.1.1/audio", Codec: "MP3", Favicon: "https://1.1.1.1/logo.png"}
+	s.CachePut("fixture", []model.Candidate{candidate})
+	var pngData bytes.Buffer
+	png.Encode(&pngData, image.NewRGBA(image.Rect(0, 0, 32, 32)))
+	app := &App{Store: s, Relay: delivery.New(s), ArtworkClient: &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(pngData.Bytes())), Request: r}, nil
+	})}}
+	h := app.Handler()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/stations/candidate/"+uuid+"/artwork", nil))
+	if w.Code != 200 || w.Header().Get("Content-Type") != "image/png" {
+		t.Fatal(w.Code, w.Header())
+	}
+	stations, _ := s.Stations("")
+	if len(stations) != 1 {
+		t.Fatal("image lookup added a station")
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/stations/candidate/unknown/artwork?url=http://127.0.0.1", nil))
+	if w.Code != 404 {
+		t.Fatal(w.Code)
+	}
+	for _, hasImage := range []bool{true, false} {
+		if !hasImage {
+			candidate.Favicon = ""
+		}
+		var html bytes.Buffer
+		card := candidateStationCard(candidateCard{Candidate: candidate})
+		if err = page.ExecuteTemplate(&html, "radio-station", card); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(html.String(), "station-thumb") || !strings.Contains(html.String(), "♫") || !strings.Contains(html.String(), ">Add</button>") {
+			t.Fatal(html.String())
+		}
+		if strings.Contains(html.String(), "data-station-artwork") != hasImage {
+			t.Fatal("incorrect image/placeholder", html.String())
 		}
 	}
 }

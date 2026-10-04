@@ -28,6 +28,7 @@ import (
 var assets embed.FS
 var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 	"listeningDuration":    listeningDuration,
+	"stationArtworkURL":    stationArtworkURL,
 	"stationListenURL":     stationListenURL,
 	"podcastDuration":      podcastDuration,
 	"addOne":               func(n int) int { return n + 1 },
@@ -115,7 +116,7 @@ func candidateStationCard(item candidateCard) card {
 			}
 		}
 	}
-	return card{Station: model.Station{Variants: station.Variants, Name: candidate.Name, URL: station.URL, Country: country, Codec: station.Codec, Bitrate: station.Bitrate, Tags: candidate.Tags, HLS: candidate.HLS != 0, RBUUID: candidate.UUID, Source: "radio-browser"}, Health: item.Health, Discovery: item.Discovery, AutoCheck: item.AutoCheck, Devices: item.Devices, Selected: item.Selected, Context: "/stations"}
+	return card{Station: model.Station{Favicon: candidate.Favicon, Variants: station.Variants, Name: candidate.Name, URL: station.URL, Country: country, Codec: station.Codec, Bitrate: station.Bitrate, Tags: candidate.Tags, HLS: candidate.HLS != 0, RBUUID: candidate.UUID, Source: "radio-browser"}, Health: item.Health, Discovery: item.Discovery, AutoCheck: item.AutoCheck, Devices: item.Devices, Selected: item.Selected, Context: "/stations"}
 }
 
 type view struct {
@@ -194,6 +195,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /activity/live", a.activity)
 	mux.HandleFunc("GET /dashboard/live", a.dashboardLive)
 	mux.HandleFunc("GET /stations/{station}/artwork", a.stationArtwork)
+	mux.HandleFunc("GET /stations/candidate/{uuid}/artwork", a.candidateArtwork)
 	mux.HandleFunc("GET /dashboard/discoveries", a.discoveries)
 	mux.HandleFunc("GET /stations/discoveries", a.discoveries)
 	mux.HandleFunc("POST /devices/rename", a.rename)
@@ -435,7 +437,7 @@ func (a *App) dashboardView(v *view) error {
 		if radio.Playing != nil {
 			v.PlayingRadios++
 			for _, station := range stations {
-				if station.ID == radio.Playing.StationID && (station.Favicon != "" || stationArtworkUUID(station) != "") {
+				if station.ID == radio.Playing.StationID {
 					radio.Image = "/stations/" + station.ID + "/artwork"
 					break
 				}

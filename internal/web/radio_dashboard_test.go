@@ -3,9 +3,11 @@ package web
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/store"
 	"strings"
@@ -28,7 +30,10 @@ func TestRadioDashboardFavouritesLastContactAndLiveRefresh(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{Store: s, Relay: delivery.New(s), Base: "http://radio.local"}
+	directory := &catalogue.Service{Store: s, Mirrors: []string{"https://directory.example"}, Client: &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader("[]")), Request: r}, nil
+	})}}
+	app := &App{Store: s, Relay: delivery.New(s), Catalogue: directory, Base: "http://radio.local"}
 	h := app.Handler()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/dashboard/live", nil))
