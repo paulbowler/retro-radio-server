@@ -33,7 +33,7 @@ func TestSettingsModalSaveCountryAndNavigation(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code
 	}
-	if post("buffer=7&reconnect=on&quality=low&country=GB", "") != 200 {
+	if post("buffer=7&reconnect=on&quality=low&country=GB", "") != 204 {
 		t.Fatal("save failed")
 	}
 	saved := s.Settings()

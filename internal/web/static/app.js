@@ -180,7 +180,8 @@ document.addEventListener("error", event => { if (event.target.matches?.("img[da
  });
  document.addEventListener("input",event=>{if(event.target.id==="playback-buffer")document.getElementById("buffer-value").textContent=event.target.value+"s";});
  document.addEventListener("htmx:afterRequest",event=>{
-  if(event.detail.elt.id!=="preferences-form"||event.detail.successful)return;
+  if(event.detail.elt.id!=="preferences-form")return;
+  if(event.detail.successful){dialog.close();return;}
   const error=document.getElementById("preferences-error");if(error){error.textContent="Couldn’t save settings. Please try again.";error.hidden=false;}
  });
 })();

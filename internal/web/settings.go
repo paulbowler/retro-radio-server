@@ -27,7 +27,7 @@ func (a *App) savePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "retro_country", Value: country, Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
-	render(w, "preferences-form", view{Settings: settings, Countries: countryOptions, Message: "Settings saved. Playback changes apply when you next start a station."})
+	w.WriteHeader(http.StatusNoContent)
 }
 func (a *App) listenerCountry(r *http.Request) (string, bool) {
 	if r.URL.Query().Has("country") {
