@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/store"
@@ -65,8 +66,10 @@ type list struct {
 	Items   []Item   `xml:"Item"`
 }
 type Handler struct {
-	Store *store.Store
-	Base  string
+	SupportsHTTPS bool // Operator-confirmed capability.
+	Music         content.Provider
+	Store         *store.Store
+	Base          string
 }
 
 func send(w http.ResponseWriter, body string) {
@@ -102,6 +105,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "device storage unavailable", 503)
 		return
 	}
+	if h.SupportsHTTPS {
+		d.Capabilities.HTTPS = true
+	}
 	// Only path/endpoint, never the identifying query, is recorded.
 	h.Store.Log(d.ID, "Directory request", r.URL.Path)
 	base := h.Base + "/setupapp/" + m[1] + "/asp/BrowseXML/"
@@ -114,7 +120,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "loginxml":
 		items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), dir("Podcasts", base+"navXML.asp?gofile=Podcasts"), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
 		count = 6
+		if h.Music != nil {
+			items = append(items, dir("My Music", base+"navXML.asp?gofile=MyMusic"))
+			count++
+		}
 	case "navxml", "favxml", "afavxml", "search":
+		if (endpoint == "navxml" && (q.Get("gofile") == "MyMusic" || q.Has("music"))) || (endpoint == "search" && q.Get("sSearchtype") == "3" && strings.HasPrefix(q.Get("Search"), "upnp_")) {
+			items, count, err = h.musicItems(r.Context(), base, q, d.Capabilities)
+			break
+		}
 		if (endpoint == "navxml" && (q.Get("gofile") == "Podcasts" || q.Get("podcast") != "")) || (endpoint == "search" && q.Get("sSearchtype") == "5") {
 			items, count, err = h.podcastItems(base, q)
 			for i := range items {

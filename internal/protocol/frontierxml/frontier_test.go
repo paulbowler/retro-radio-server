@@ -21,7 +21,7 @@ func newHandler(t *testing.T) *Handler {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.DB.Close() })
-	return &Handler{s, "http://192.168.1.20"}
+	return &Handler{Store: s, Base: "http://192.168.1.20"}
 }
 func TestReferenceTransactions(t *testing.T) {
 	h := newHandler(t)

@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Package content defines a source-neutral hierarchical audio catalogue.
+package content
+
+import (
+	"context"
+	"retroradio.local/server/internal/model"
+)
+
+type Kind string
+
+const (
+	Folder       Kind = "folder"
+	PlayableItem Kind = "playable"
+)
+
+type Resource struct {
+	URL                   string
+	Protocol, MIME, Codec string
+	Bitrate               int // kbps (UPnP res bitrate is bytes/second)
+}
+type Item struct {
+	ID, ParentID, Title, Source     string
+	Artist, Album, ArtURL, Duration string
+	Kind                            Kind
+	Resources                       []Resource
+	// PlaybackID is an opaque source-issued token, never a client-supplied URL.
+	PlaybackID    string
+	PlaybackCodec string
+	Transcoded    bool
+}
+type Page struct {
+	Items           []Item
+	Total, Returned int
+	ParentID, Title string
+	UpdateID        string
+}
+type Playback struct {
+	Transcode bool // FLAC input converted to the established MP3 output profile.
+	Direct    bool // Device can consume the selected HTTPS resource.
+	Item      Item
+	Resource  Resource
+}
+type Provider interface {
+	Browse(context.Context, string, int, int) (Page, error)
+	Resolve(context.Context, string, model.Capabilities) (Playback, error)
+}
+
+func (p Playback) Codec() string {
+	if p.Transcode {
+		return "MP3"
+	}
+	return p.Resource.Codec
+}
+func (p Playback) Bitrate() int {
+	if p.Transcode {
+		return 128
+	}
+	return p.Resource.Bitrate
+}

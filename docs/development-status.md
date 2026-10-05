@@ -1,6 +1,14 @@
 # Development status
 
-Updated 4 October 2026.
+Updated 5 October 2026.
+
+## MinimServer milestone
+
+Implemented the server-side My Music → MinimServer → native server hierarchy → track lookup → playback path using a general Browse/Resolve content provider. Manual device-description URL configuration works without discovery. Paginated SOAP/DIDL browsing, native MP3/AAC resource selection followed by bounded FFmpeg FLAC → MP3 fallback, explicit HTTPS radio capability, opaque scoped LAN audio/artwork endpoints, metadata and 128-pixel JPEG logos are implemented. The authenticated dashboard browser and bounded on-demand SSDP discovery support debugging. No music files are scanned and no library is mirrored to SQLite.
+
+The milestone is **not yet accepted on physical hardware**. Automated fixtures cover menu traversal through Album/album/track, lookup metadata/artwork, page mappings, resource alternatives, malformed/offline servers, scoped transport/redirects, invalid/expired opaque IDs, byte-range/HEAD playback, artwork and web authentication/failure isolation. The owner reports Pure HTTPS support; this remains an explicit operator setting rather than an automatically detected capability.
+
+FLAC-only CD tracks use the automatic MP3 fallback when FFmpeg is available (already included in Docker). Native compatible resources take priority. MinimStreamer's documented local FLAC output formats were investigated first and do not guarantee an MP3 resource. Music conversion tests cover native preference, disabled/missing FFmpeg, lifecycle/slot cleanup and range/HEAD behaviour; generated real-audio encoding tests run when FFmpeg is available. Physical Pure display of track metadata/artwork and audible playback remain acceptance work. Music presets/favourites, whole-album auto-advance and seeking in converted tracks are deferred.
 
 ## Implemented
 
@@ -27,6 +35,10 @@ Local Go tests, race checks, vet and Linux amd64/arm64 builds have passed during
 The Docker image has been built and the local service upgraded repeatedly while preserving its volume. Browser walkthroughs covered navigation, discovery and filtering, library management, radio favourites, custom forms, listening activity, help, confirmation cancellation and unsuccessful additions. Synthetic save/delete tests use disposable databases. BBC “More or Less” discovery, subscription, episode browsing and browser audio delivery were verified on an isolated server. Podcast radio menus, persistence, feed failures, unsafe links and byte-range playback have automated coverage.
 
 ## Still open
+
+- Physical Pure MinimServer acceptance, including real server description/resource URLs, track details/artwork, seeking and HTTPS delivery.
+- Physical acceptance of the FLAC → MP3 fallback; seeking in converted tracks remains unsupported.
+- Persistent music favourites/presets and album auto-advance.
 
 - Broader physical-radio acceptance: navigation, reconnects, power-cycle persistence and additional models.
 - Redacted complete Pure protocol captures; existing fixtures remain reference-derived.

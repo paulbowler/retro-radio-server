@@ -13,10 +13,12 @@ import (
 	"net/http"
 	"net/url"
 	"retroradio.local/server/internal/catalogue"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/store"
+	"retroradio.local/server/internal/upnp"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,6 +50,7 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 }).ParseFS(assets, "dashboard.html"))
 
 type App struct {
+	Music                content.Provider
 	ArtworkClient        *http.Client
 	artworkMu            sync.Mutex
 	artworkLoads         sync.Map
@@ -124,6 +127,11 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
+	MusicServers                                []upnp.DiscoveredServer
+	MusicDiscovery                              string
+	MusicItems                                  []musicEntry
+	MusicTitle, MusicRoot, MusicParent          string
+	MusicConnected                              bool
 	Settings                                    store.Settings
 	DiscoveryID                                 string
 	DiscoveryCursor                             int
@@ -158,7 +166,7 @@ type view struct {
 	AutoCheck                                   bool
 }
 
-var sections = map[string]string{"/": "Dashboard", "/stations": "Stations", "/podcasts": "Podcasts", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
+var sections = map[string]string{"/": "Dashboard", "/music": "My Music", "/stations": "Stations", "/podcasts": "Podcasts", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
 
 func partial(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-History-Restore-Request") != "true"
@@ -369,6 +377,8 @@ func (a *App) screen(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Couldn’t load the overview. Please try again.", 503)
 			return
 		}
+	case "/music":
+		a.musicView(r, &v)
 	case "/podcasts":
 		a.podcastView(r, &v)
 	case "/custom":

@@ -1,6 +1,6 @@
 # Retro Radio Server
 
-A self-hosted server that keeps legacy internet radios playing. Discover stations, build a shared library and choose favourites for each radio through a neon-themed web interface.
+A local audio-content hub and compatibility layer that keeps legacy internet radios playing. Discover stations, build a shared library and choose favourites for each radio through a neon-themed web interface.
 
 Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, including FFmpeg for modern adaptive streams. Licensed under GPL-3.0-only.
 
@@ -12,6 +12,7 @@ Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, in
 - A shared station library available to every radio, with individual favourites.
 - Custom stations from public listening links, with automatic audio detection.
 - Radio menus for all stations, country, genre, favourites, podcasts and search.
+- My Music menus from a configured MinimServer / UPnP ContentDirectory, with paginated browsing, track details, album artwork and opaque playback links.
 - Podcast search, shared RSS/Atom subscriptions and hourly episode updates, with MP3/AAC playback and browser previews.
 - Automatic HTTP/HTTPS negotiation and local HTTP delivery for older radios.
 - HLS and MPEG-DASH audio converted to continuous MP3, including BBC-style streams.
@@ -72,6 +73,25 @@ Subscriptions are shared by all radios. New episodes are fetched hourly; a faile
 
 Search uses the [Apple podcast catalogue](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/Searching.html), without an account or API key. Search terms and a regional country code go to Apple; radio identifiers do not. Public RSS/Atom feeds with MP3 or AAC enclosures are supported. M4A/MP4, video, paid/authenticated feeds and listening-position sync are not supported yet. Audio passes through the checked HTTP relay, including HTTPS negotiation and byte-range requests where the publisher supports them. Podcast menu responses are tested against the documented Frontier format; physical-radio podcast playback still needs confirmation.
 
+### Browse MinimServer music
+
+MinimServer remains the authoritative library: it scans the music, supplies metadata and organisation, indexes/searches it and serves source audio. Retro Radio does not scan your NAS, parse music files or mirror the library into SQLite.
+
+1. Set `RETRO_MUSIC_SERVER_URL` in `.env` to the **exact UPnP device-description URL**, for example `http://<NAS-IP>:<UPnP-port>/<description-path>`. The MinimServer configuration web page is a different endpoint; neither a bare NAS address nor a guessed path is sufficient. **My Music → Find music servers** can show SSDP description links when multicast works on the server's network. Copy the chosen link into the configuration; discovery never connects to a server automatically.
+2. Restart with `docker compose up -d --build`. The configured music server need not be online at startup.
+3. Open **My Music** on the dashboard to verify connection, folders, tracks, metadata, artwork and page navigation independently of the radio.
+4. Refresh the Pure directory, then choose **My Music → MinimServer → Album → an album → a track**. The folders underneath MinimServer come from the server, so their exact names and structure may differ.
+
+Compatible MP3 and ADTS AAC resources are preferred. When MinimServer offers only FLAC, FFmpeg converts it on demand to MP3 at 128 kbps, 44.1 kHz, stereo. HTTP resources and converted audio use the local opaque relay; compatible native HTTPS resources can either use it or play directly. Docker already includes FFmpeg; native installs need `ffmpeg` with `libmp3lame` on `PATH`. Set `RETRO_MUSIC_TRANSCODE=false` to disable the fallback. Set `RETRO_RADIO_HTTPS=true` only if HTTPS playback is known to work on **all radios** using this directory. It permits direct HTTPS links in directory responses; the default remains false. This is an operator setting, not automatic model detection. Internal DNS names such as `music.home.paulbowler.co.uk` work for configured HTTPS description/resource URLs, with normal certificate verification. DNS alone does not supply a UPnP description path. `RETRO_PUBLIC_URL` remains the existing HTTP radio directory/relay origin; an HTTPS management address such as `https://radio.home.paulbowler.co.uk` can still be supplied by your reverse proxy.
+
+All server-fetched resources and artwork must be on the configured server hostname or one of its pinned IP addresses. Different ports on that same host are allowed (80, 443, or 1024–65535). If a reverse proxy publishes a description on one hostname but MinimServer advertises resources on a different hostname/address, the provider rejects them unless that address is the same pinned server IP. Configure the description and advertised resources consistently; this intentionally does not open access to arbitrary LAN hosts. Changing the server's DNS/IP or ContentDirectory endpoint requires a Retro Radio restart.
+
+Native audio delivery forwards GET/HEAD and byte ranges without changing source audio. Converted FLAC starts at the beginning and does not support seeking; an initial `Range: bytes=0-` request restarts playback, while other ranges are rejected. Conversion is limited to four concurrent tracks and ends on disconnect, cancellation or source failure. Unknown and expired playback/artwork IDs cannot select arbitrary URLs. Artist, album and duration are included in the established description field; album art is delivered as the same bounded 128-pixel JPEG used for station logos. Actual display fields depend on the Pure firmware and need hardware acceptance. Music tokens are held in bounded memory, expire after 24 hours without reuse, and reset on restart; browse again to refresh links. Music favourites/presets, autoplay of the whole album, search and a mirrored music database are not part of this milestone.
+
+FLAC conversion consumes only the bytes MinimServer serves, with no NAS filesystem access, persistent converted files or metadata parsing from the audio. FFmpeg has no source URL and is restricted to a FLAC input pipe and MP3 output pipe. [MinimStreamer's documented transcoding](https://minimstreamer.com/userguide.html) was investigated first; its documented local FLAC outputs are PCM/WAV rather than a compatible MP3 resource, so this fallback closes that gap. Native resources still take priority, including any compatible resource already provided by MinimServer. WAV/FLAC direct radio decoding is not assumed. The first audible physical-Pure music test, including metadata/artwork display, remains unverified.
+
+SSDP is a best-effort, two-second manual discovery operation. Docker bridge networks, VLANs and multicast restrictions may prevent results; manual configuration is sufficient. Music requests time out independently and an unavailable server does not prevent radio/podcast browsing or server startup.
+
 ### Restart or upgrade
 
 ```sh
@@ -92,6 +112,9 @@ The database lives in a persistent Docker volume. Keep that volume when rebuildi
 | `RETRO_ADMIN_USER` | `admin` | Management username |
 | `RETRO_ADMIN_PASSWORD` | empty | Enables authentication for the web interface, REST API and support report |
 | `RETRO_CATALOGUE_URL` | DNS-discovered mirrors | Optional public Radio-Browser API origin |
+| `RETRO_MUSIC_SERVER_URL` | empty | Opt-in exact UPnP device-description URL; manual configuration works without SSDP |
+| `RETRO_MUSIC_TRANSCODE` | `true` | FLAC → MP3 fallback when native compatible resources are absent and FFmpeg is available |
+| `RETRO_RADIO_HTTPS` | `false` | Operator-confirmed HTTPS playback for every radio; enables direct HTTPS directory links |
 | `RETRO_HEALTH_URL` | `http://127.0.0.1:8080/healthz` | CLI health check URL |
 
 This is a **trusted home-network service**. Management Basic authentication uses HTTP unless you provide a TLS terminator or VPN. Radio endpoints cannot require management credentials. Keep the radio’s HTTP access available and do not expose the service as a public internet proxy. Local `.env` files, databases and backups are excluded from Git.
@@ -119,7 +142,7 @@ Direct MP3 and AAC streams can play on the default radio profile. HTTPS audio is
 
 HLS and MPEG-DASH audio, including AAC-LC and HE-AAC, is converted by FFmpeg to MP3 at 128 kbps, 44.1 kHz, stereo. Docker includes FFmpeg; native installations need it on `PATH` with an MP3 encoder. Four conversion processes can run concurrently. Protected/DRM streams and PLS playlists are unsupported. Availability and geographic restrictions depend on the broadcaster.
 
-Connections, redirects, manifests and segments reject non-public upstream addresses, pin checked DNS addresses and retain TLS verification. Stored stream identifiers are used instead of accepting arbitrary playback URLs. See [architecture](docs/architecture.md) for limits and implementation details.
+Radio and podcast connections, redirects, manifests and segments reject non-public upstream addresses, pin checked DNS addresses and retain TLS verification. Stored stream identifiers are used instead of accepting arbitrary playback URLs. See [architecture](docs/architecture.md) for limits and implementation details.
 
 A stream check confirms audio can be received; it cannot prove a physical radio will decode every station. Later failed checks do not delete saved stations.
 

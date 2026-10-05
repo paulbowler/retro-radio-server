@@ -10,10 +10,12 @@ import (
 	"os/signal"
 	"path/filepath"
 	"retroradio.local/server/internal/catalogue"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/protocol/frontierxml"
 	"retroradio.local/server/internal/store"
+	"retroradio.local/server/internal/upnp"
 	"retroradio.local/server/internal/web"
 	"strings"
 	"syscall"
@@ -63,10 +65,25 @@ func main() {
 		cat.Mirrors = []string{mirror}
 	}
 	podcasts := podcast.New(s)
-	app := &web.App{Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
+	var music *upnp.Provider
+	var musicProvider content.Provider
+	if raw := os.Getenv("RETRO_MUSIC_SERVER_URL"); raw != "" {
+		music, e = upnp.New(raw)
+		if e != nil {
+			log.Printf("My Music disabled: %v", e)
+		} else {
+			music.DisableTranscode = os.Getenv("RETRO_MUSIC_TRANSCODE") == "false"
+			musicProvider = music
+		}
+	}
+	app := &web.App{Music: musicProvider, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
 	mux := http.NewServeMux()
-	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base})
+	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base, Music: musicProvider, SupportsHTTPS: os.Getenv("RETRO_RADIO_HTTPS") == "true"})
 	mux.Handle("/stream/", relay)
+	if music != nil {
+		mux.Handle("/stream/upnp/", music)
+		mux.HandleFunc("/artwork/upnp/", music.ServeArtwork)
+	}
 	mux.HandleFunc("/episode/", relay.ServeEpisode)
 	mux.HandleFunc("/artwork/", app.ServeRadioArtwork)
 	mux.Handle("/", app.Handler())
