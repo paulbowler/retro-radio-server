@@ -65,7 +65,7 @@
 {{if not .MusicRootPage}}<div class="music-heading"><a href="{{if .MusicParent}}{{.MusicParent}}{{else}}/music{{end}}" hx-get="{{if .MusicParent}}{{.MusicParent}}{{else}}/music{{end}}" hx-target="#content" hx-push-url="true">← Back</a><h2>{{.MusicTitle}}</h2></div>{{end}}
 {{template "music-pagination" .}}<div class="grid">{{range .MusicItems}}
 {{if .Folder}}<a class="card music-folder" href="{{.BrowseURL}}" hx-get="{{.BrowseURL}}" hx-target="#content" hx-push-url="true"><h3>{{.Title}}</h3><span aria-hidden="true">›</span></a>
-{{else}}<article class="card">{{if .ArtURL}}<img src="{{.ArtURL}}" alt="" width="128" height="128" loading="lazy">{{end}}<h3>{{.Title}}</h3>{{if .Artist}}<p>{{.Artist}}</p>{{end}}{{if or .Album .Duration}}<p class="muted">{{.Album}}{{if and .Album .Duration}} · {{end}}{{.Duration}}</p>{{end}}{{if .PlayURL}}<audio controls preload="none" aria-label="Listen to {{.Title}}" src="{{.PlayURL}}"></audio>{{else}}<p class="muted">This track cannot be played.</p>{{end}}</article>{{end}}
+{{else}}<article class="card music-track"><div class="music-track-heading">{{if .ArtURL}}<img class="music-track-artwork" src="{{.ArtURL}}" alt="" width="128" height="128" loading="lazy">{{end}}<div class="music-track-details"><h3>{{.Title}}</h3>{{if .Artist}}<p>{{.Artist}}</p>{{end}}{{if .Album}}<p class="muted">{{.Album}}</p>{{end}}{{if .Duration}}<p class="muted">{{.Duration}}</p>{{end}}</div></div>{{if .PlayURL}}<audio class="music-player" controls preload="none" aria-label="Listen to {{.Title}}" src="{{.PlayURL}}"></audio>{{else}}<p class="muted">This track cannot be played.</p>{{end}}</article>{{end}}
 {{else}}<p class="empty">This folder is empty.</p>{{end}}</div>{{template "music-pagination" .}}
 {{end}}
 {{end}}

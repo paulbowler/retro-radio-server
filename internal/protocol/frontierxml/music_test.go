@@ -72,12 +72,15 @@ func TestMusicMenuHierarchyPaginationMetadataAndLookup(t *testing.T) {
 	}
 	base := h.Base + "/setupapp/pure/asp/BrowseXML/"
 	root := get(base + "loginXML.asp?gofile=")
-	if root.Count != 7 {
+	if root.Count != 3 {
 		t.Fatal(root)
+	}
+	if root.Items[1].Title != "Radio" || root.Items[2].Title != "Podcasts" || root.Items[3].Title != "Music" {
+		t.Fatal("unexpected top-level menu", root)
 	}
 	var music Item
 	for _, item := range root.Items {
-		if item.Title == "My Music" {
+		if item.Title == "Music" {
 			music = item
 		}
 	}
@@ -116,7 +119,7 @@ func TestMusicMenuHierarchyPaginationMetadataAndLookup(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 	root = get(base + "loginXML.asp?gofile=")
-	if root.Count != 7 {
+	if root.Count != 3 {
 		t.Fatal("music outage broke root")
 	}
 	radio := get(base + "navXML.asp?gofile=Radio")

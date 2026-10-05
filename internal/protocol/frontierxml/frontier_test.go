@@ -106,6 +106,15 @@ func TestFollowAdvertisedURLs(t *testing.T) {
 	u := root.Items[1].Dir + "&mac=0123456789abcdef"
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", u, nil))
+	var menu list
+	if e := xml.Unmarshal(w.Body.Bytes(), &menu); e != nil {
+		t.Fatal(e)
+	}
+	if menu.Count != 5 || menu.Items[1].Title != "All stations" || !strings.Contains(menu.Items[0].Previous, "loginXML.asp") {
+		t.Fatal("invalid Radio menu", menu)
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", menu.Items[1].Dir+"&mac=0123456789abcdef", nil))
 	var stations list
 	if e := xml.Unmarshal(w.Body.Bytes(), &stations); e != nil {
 		t.Fatal(e)

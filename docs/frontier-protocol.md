@@ -21,8 +21,8 @@ KIMB and LibreFrontier are GPL-3.0; YCast is GPL-3.0-or-later. This new Go imple
 1. **Observed Pure request**: `GET /setupapp/pure/asp/BrowseXML/loginXML.asp?token=0`.
    Response body is exactly `<EncryptedToken>3a3f5ac48a1dab4e</EncryptedToken>`, no XML declaration. The value is supported by KIMB and Hama traces. It is not a management authentication credential.
 2. **Reference-derived**: `GET .../loginXML.asp?gofile=&mac=<opaque>&dlang=eng&fver=8&ven=pure`.
-   Register/update a device using the opaque identifier; do not interpret `mac` as a NIC MAC. Return `ListOfItems`, count 3, Previous plus My stations, Favourites and Search. Root has a Previous entry pointing to itself.
-3. Follow advertised `.../navXML.asp?gofile=Radio`; the radio appends identity/language/firmware. Return count 1, Previous plus the short Station item (type, `StationId=1001`, `StationName=Smooth Radio`). Every navigation URL already includes `?`, allowing appended `&mac=...`.
+   Register/update a device using the opaque identifier; do not interpret `mac` as a NIC MAC. Return `ListOfItems`, count 3 with music enabled (otherwise 2), Previous plus Radio, Podcasts and Music. Root has a Previous entry pointing to itself.
+3. Open Radio via `.../navXML.asp?gofile=RadioMenu`, which groups All stations, By country, By genre, Favourites and Search stations. Follow All stations at `.../navXML.asp?gofile=Radio`; the radio appends identity/language/firmware. Return count 1, Previous plus the short Station item (type, `StationId=1001`, `StationName=Smooth Radio`). Every navigation URL already includes `?`, allowing appended `&mac=...`.
 4. **Reference-derived station selection**: `GET .../Search.asp?sSearchtype=3&Search=1001&mac=<opaque>`. Return Previous plus one full Station item with name, ID, HTTP `StationUrl`, description, empty Logo, Radio format, United Kingdom location, configured 128 kbps, MP3 mime and reliability 5.
 5. Request `http://<configured-origin>/stream/<random-id>`, without radio identity parameters. The server opens `https://media-ice.musicradio.com/SmoothUKMP3` and relays audio unchanged. No 3xx Location or HTTPS URL is sent downstream.
 
@@ -32,7 +32,7 @@ All XML responses have explicit **byte** Content-Length and no-store. Manufactur
 
 ## Search and favourites
 
-The root advertises a Search item with `SearchURL` ending `?sSearchtype=1` and the documented SearchButtonGo/Cancel/Textbox fields. Submitted `Search` is matched against the local station name. Search-type differences exist in prior art (LibreFrontier uses type 2); non-type-3 requests here use the local search path. The exact Pure search submission requires confirmation.
+The Radio submenu advertises a Search item with `SearchURL` ending `?sSearchtype=1` and the documented SearchButtonGo/Cancel/Textbox fields. Submitted `Search` is matched against the local station name. Search-type differences exist in prior art (LibreFrontier uses type 2); non-type-3 requests here use the local search path. The exact Pure search submission requires confirmation.
 
 `FavXML.asp` and `AFavXML.asp` return this radio's stored favourites. The UI provides reliable add/remove actions. `AddFav.asp` and `RemoveFavs.asp` accept station ID variants (`ID`, `StationId`, `stationid`, `Search`), but these mutation parameter variants are **provisional**, not verified Pure captures. Radio-side bookmarking is not part of milestone acceptance. Podcast bookmarking and global favourites groups are not implemented.
 

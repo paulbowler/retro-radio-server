@@ -122,14 +122,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	dir := func(title, link string) Item { return Item{Type: "Dir", Title: title, Dir: link, Backup: link} }
 	switch endpoint {
 	case "loginxml":
-		items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), dir("Podcasts", base+"navXML.asp?gofile=Podcasts"), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
-		count = 6
+		items = append(items, dir("Radio", base+"navXML.asp?gofile=RadioMenu"), dir("Podcasts", base+"navXML.asp?gofile=Podcasts"))
+		count = 2
 		if h.Music != nil {
-			items = append(items, dir("My Music", base+"navXML.asp?gofile=MyMusic"))
+			items = append(items, dir("Music", base+"navXML.asp?gofile=Music"))
 			count++
 		}
 	case "navxml", "favxml", "afavxml", "search":
-		if (endpoint == "navxml" && (q.Get("gofile") == "MyMusic" || q.Has("music"))) || (endpoint == "search" && q.Get("sSearchtype") == "3" && h.isMusicStation(q.Get("Search"))) {
+		if endpoint == "navxml" && q.Get("gofile") == "RadioMenu" {
+			items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
+			count = 5
+			break
+		}
+		if (endpoint == "navxml" && (q.Get("gofile") == "Music" || q.Get("gofile") == "MyMusic" || q.Has("music"))) || (endpoint == "search" && q.Get("sSearchtype") == "3" && h.isMusicStation(q.Get("Search"))) {
 			items, count, err = h.musicItems(r.Context(), base, q, d.Capabilities)
 			if endpoint == "search" {
 				if err != nil {
@@ -149,6 +154,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		}
+		// Radio listings and lookup return to their category menu.
+		items[0].Previous = base + "navXML.asp?gofile=RadioMenu"
+		items[0].PreviousBackup = items[0].Previous
 		var stations []model.Station
 		if endpoint == "search" && q.Get("sSearchtype") == "3" {
 			var s model.Station

@@ -19,7 +19,7 @@ func musicLink(base, object string) string {
 	return base + "navXML.asp?music=" + base64.RawURLEncoding.EncodeToString([]byte(object))
 }
 func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, caps model.Capabilities) ([]Item, int, error) {
-	root := base + "navXML.asp?gofile=MyMusic"
+	root := base + "navXML.asp?gofile=Music"
 	previous := Item{Type: "Previous", Previous: root, PreviousBackup: root}
 	if h.Music == nil {
 		return nil, 0, errors.New("music server not configured")

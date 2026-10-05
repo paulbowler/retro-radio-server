@@ -79,7 +79,7 @@ MinimServer remains the authoritative library: it scans the music, supplies meta
 
 1. Start or update Retro Radio with `docker compose up -d --build`. On Linux/NAS, Compose starts a small LAN discovery helper alongside the application. It uses the host network for SSDP and passes discovered server descriptions through a shared, read-only handoff to the application. The application keeps its existing port mapping and database volume.
 2. With MinimServer running on the same LAN, open **Music** in the web menu. Music servers appear automatically by their published names, and the server list refreshes while you view it. Select a server to browse its folders and play tracks; no addresses, ports or description paths need entering.
-3. After an update or server restart, reopen the music menu so playback links are fresh. Refresh the Pure directory, then choose **My Music → your MinimServer → Album → an album → a track**. The folders underneath the server come from MinimServer, so their names and structure may differ. Multiple discovered UPnP music servers can coexist under My Music.
+3. After an update or server restart, reopen the music menu so playback links are fresh. Refresh the Pure directory, then choose **Music → your MinimServer → Album → an album → a track**. The folders underneath the server come from MinimServer, so their names and structure may differ. Multiple discovered UPnP music servers can coexist under Music.
 
 Discovery starts in the background and repeats every 30 seconds. Brief missed announcements retain a server; one absent for five minutes is removed automatically. Radio/podcast service never waits for discovery. The helper discovers MediaServer and ContentDirectory advertisements on active multicast-capable IPv4 interfaces, avoiding dependence on one default route. Source addresses and device descriptions are checked before a server is added.
 
@@ -137,7 +137,7 @@ The installed app opens on the dashboard in its own window. Existing Home Screen
 
 ## App settings
 
-The cog in the header opens shared settings for every radio. The logo returns to the dashboard.
+The cog in the header opens shared settings for every radio. The logo returns to the dashboard. On the Pure, the top-level choices are Radio, Podcasts and Music. Radio contains All stations, By country, By genre, Favourites and Search stations. Web music cards place track details beside the artwork and use full-width native audio controls, matching the other players.
 
 - **Playback buffer:** 0–10 seconds of live audio held ahead of playback. Larger values add tuning delay and can smooth short connection drops. The duration is estimated from the station’s bitrate, so variable or unknown bitrates can differ. Zero keeps immediate playback.
 - **Automatically reconnect:** retries the same live stream after a disconnect or stall, keeping the radio connection open for up to roughly a minute of retries. A buffer can cover short interruptions; longer outages can still pause playback. Reconnecting joins the current live broadcast and may skip content missed during the outage.
