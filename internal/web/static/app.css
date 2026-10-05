@@ -63,9 +63,12 @@ body{background:radial-gradient(ellipse at 90% 0,rgba(111,37,179,.18),transparen
 
 .preferences-modal .modal-actions{position:sticky;bottom:-28px;padding:14px 0;margin:12px 0 -14px;background:#140e23}.preferences-modal h2{margin-top:0}.preferences-modal .setting-hint{margin-bottom:14px}
 
-@media(max-width:360px){aside{gap:8px;padding:10px 12px}.brand img{width:44px;height:44px}.settings-cog{padding:7px}aside nav a{padding:7px 6px}}
+@media(max-width:400px){aside{gap:6px;padding:10px 12px}.brand img{width:44px;height:44px}.settings-cog{padding:7px}aside nav a{padding:7px 6px}}
 
 /* Keep the installed app clear of notches, landscape cutouts and the home indicator. */
 body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom)}aside{padding-top:calc(12px + env(safe-area-inset-top))}.confirmation{max-height:calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}@media(max-width:600px){aside{padding-top:calc(10px + env(safe-area-inset-top))}}
 
 @supports(height:100dvh){.app{min-height:calc(100dvh - env(safe-area-inset-bottom))}}
+
+@media(max-width:340px){aside{gap:4px}.brand img{width:32px;height:32px}.settings-cog{padding:5px}aside nav a{padding:7px 3px}}
+.music-heading{margin-bottom:20px}.music-heading h2{margin:12px 0 0}.music-folder{display:flex;align-items:center;justify-content:space-between;gap:16px;text-decoration:none;color:var(--ink)}.music-folder h3{margin:0}.music-folder:hover{border-color:var(--green)}.music-folder span{color:var(--green);font-size:24px}

@@ -126,9 +126,8 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
-	MusicDiscovery                              string
 	MusicItems                                  []musicEntry
-	MusicTitle, MusicRoot, MusicParent          string
+	MusicTitle, MusicParent                     string
 	MusicRootPage                               bool
 	MusicConnected                              bool
 	Settings                                    store.Settings
@@ -165,7 +164,7 @@ type view struct {
 	AutoCheck                                   bool
 }
 
-var sections = map[string]string{"/": "Dashboard", "/music": "My Music", "/stations": "Stations", "/podcasts": "Podcasts", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
+var sections = map[string]string{"/": "Dashboard", "/music": "Music", "/stations": "Stations", "/podcasts": "Podcasts", "/devices": "Radios", "/custom": "Add custom station", "/activity": "Activity", "/settings": "Help"}
 
 func partial(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-History-Restore-Request") != "true"

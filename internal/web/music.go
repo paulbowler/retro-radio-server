@@ -10,9 +10,9 @@ import (
 )
 
 type musicEntry struct {
-	Title, BrowseURL, PlayURL, Codec string
-	Artist, Album, Duration, ArtURL  string
-	Folder                           bool
+	Title, BrowseURL, PlayURL       string
+	Artist, Album, Duration, ArtURL string
+	Folder                          bool
 }
 
 func musicBrowseURL(id string, offset int) string {
@@ -26,14 +26,9 @@ func musicPageURL(id string, offset int, trail string) string {
 	return link
 }
 func (a *App) musicView(r *http.Request, v *view) {
-	if r.URL.Query().Get("discover") == "1" {
-		if finder, ok := a.Music.(interface{ Rediscover() }); ok {
-			finder.Rediscover()
-			v.MusicDiscovery = "Looking for music servers. They will appear automatically."
-		}
-	}
+	v.MusicRootPage = true
 	if a.Music == nil {
-		v.Message = "Looking for music servers on your network."
+		v.Message = "Looking for your music…"
 		return
 	}
 
@@ -66,17 +61,16 @@ func (a *App) musicView(r *http.Request, v *view) {
 	}
 	result, e := a.Music.Browse(r.Context(), object, offset, 24)
 	if e != nil {
-		v.Message = "Music server unavailable. Make sure it is running, then retry. Radio and podcasts are still available."
+		v.Message = "Your music is temporarily unavailable. Please try again shortly."
 		v.Error = true
 		return
 	}
 	if object == "0" && result.Total == 0 {
-		v.Message = "Looking for music servers on your network. Make sure your music server is running."
+		v.Message = "Looking for your music…"
 		return
 	}
 	v.MusicConnected = true
 	v.MusicTitle = result.Title
-	v.MusicRoot = musicBrowseURL("0", 0)
 	if result.ParentID != "" && result.ParentID != "-1" {
 		v.MusicParent = musicBrowseURL(result.ParentID, 0)
 	}
@@ -89,10 +83,6 @@ func (a *App) musicView(r *http.Request, v *view) {
 			entry.BrowseURL = musicBrowseURL(item.ID, 0)
 		} else {
 			if item.PlaybackCodec != "" {
-				entry.Codec = item.PlaybackCodec
-				if item.Transcoded {
-					entry.Codec = "FLAC → MP3"
-				}
 				entry.PlayURL = "/stream/upnp/" + item.PlaybackID
 			}
 		}

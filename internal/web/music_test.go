@@ -4,6 +4,7 @@ package web
 import (
 	"context"
 	"errors"
+	"html"
 	"net/http/httptest"
 	"path/filepath"
 	"retroradio.local/server/internal/content"
@@ -51,10 +52,18 @@ func TestMusicWebAuthBrowsePaginationAndOutage(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	body := w.Body.String()
-	for _, want := range []string{"Music library available", "Album &amp; more", "So What", "Miles Davis", "Kind of Blue", "/stream/upnp/upnp_fixture", "/artwork/upnp/upnp_fixture.jpg", "offset=26"} {
+	for _, want := range []string{"MinimServer [NAS]", "Album &amp; more", "So What", "Miles Davis", "Kind of Blue", "/stream/upnp/upnp_fixture", "/artwork/upnp/upnp_fixture.jpg", "offset=26"} {
 		if !strings.Contains(body, want) {
 			t.Fatal(want, body)
 		}
+	}
+	for _, unwanted := range []string{"FFmpeg", "FLAC", "Find music servers", "Refresh music", "Music library available", "/stations/music"} {
+		if strings.Contains(body, unwanted) {
+			t.Fatal("unexpected music interface content", unwanted)
+		}
+	}
+	if !strings.Contains(body, `href="`+html.EscapeString(musicPageURL("album", 26, "24"))+`"`) {
+		t.Fatal("next page does not stay in music", body)
 	}
 	if w.Code != 200 || strings.Contains(body, "<!doctype") || music.offset != 24 || music.count != 24 {
 		t.Fatal(w.Code, music)
@@ -69,7 +78,7 @@ func TestMusicWebAuthBrowsePaginationAndOutage(t *testing.T) {
 	music.fail = true
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "Music server unavailable") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Your music is temporarily unavailable") {
 		t.Fatal(w.Code, w.Body)
 	}
 	r = httptest.NewRequest("GET", "/", nil)

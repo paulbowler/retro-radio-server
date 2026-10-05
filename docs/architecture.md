@@ -90,7 +90,7 @@ SOAP/description XML is limited to 4 MiB, with five-second total browsing/metada
 
 `/artwork/upnp/<token>.jpg` resolves only browsed metadata, fetches albumArtURI through the scoped transport within eight seconds and a 1 MiB limit, then applies the shared image dimension/pixel limits and 128-pixel JPEG conversion. Missing/unsafe/malformed artwork fails independently of audio. It introduces no persistent artwork or music mirror. Public audio/artwork endpoints remain bearer URLs because legacy radios cannot supply management credentials.
 
-The authenticated HTMX My Music page provides server/root/parent navigation, 24-entry pages, compatible previews, artist/album/duration/artwork and failure feedback. Its root refreshes every five seconds so discovered servers appear without an extra user action. Find music servers coalesces a request to the background manager rather than performing multicast or exposing technical URLs in a page request. Radio dashboard polling still does not contact the music servers.
+The authenticated HTMX Music page opens with available servers as clickable folders, then shows the server hierarchy with Back navigation, 24-entry pages, track playback, artist/album/duration/artwork and brief failure feedback. Discovery controls and format explanations are kept out of the interface; the dashboard uses the shared Music menu without a duplicate setup card. Its root refreshes every five seconds so discovered servers appear without an extra user action. Radio dashboard polling still does not contact the music servers.
 
 ### Automatic discovery and Linux Docker boundary
 
