@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package upnp
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDiscoveryParsing(t *testing.T) {
 	raw := "HTTP/1.1 200 OK\r\nLOCATION: https://music.home.paulbowler.co.uk/description.xml\r\nST: urn:schemas-upnp-org:service:ContentDirectory:1\r\nUSN: uuid:music\r\n\r\n"
@@ -12,6 +15,18 @@ func TestDiscoveryParsing(t *testing.T) {
 	for _, raw := range []string{"garbage", "HTTP/1.1 200 OK\r\nLOCATION: file:///etc/passwd\r\n\r\n", "HTTP/1.1 200 OK\r\nLOCATION: http://music.home/\r\nST: not-a-music-server\r\n\r\n"} {
 		if _, ok := parseDiscovery(raw, "192.168.1.1"); ok {
 			t.Fatal(raw)
+		}
+	}
+}
+
+func TestMediaServerDiscoveryTarget(t *testing.T) {
+	raw := "HTTP/1.1 200 OK\r\nLOCATION: http://192.168.1.10:9791/device.xml\r\nST: urn:schemas-upnp-org:device:MediaServer:1\r\nUSN: uuid:music\r\n\r\n"
+	if _, ok := parseDiscovery(raw, "192.168.1.10"); !ok {
+		t.Fatal("MediaServer reply ignored")
+	}
+	for _, target := range discoveryTargets {
+		if !strings.Contains(searchMessage(target), "ST: "+target+"\r\n") {
+			t.Fatal("discovery target omitted")
 		}
 	}
 }

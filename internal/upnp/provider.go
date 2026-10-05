@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Package upnp adapts a manually configured UPnP ContentDirectory, without indexing music.
+// Package upnp adapts UPnP ContentDirectory servers, without indexing music.
 package upnp
 
 import (
@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os/exec"
 	"retroradio.local/server/internal/content"
@@ -31,7 +32,8 @@ type token struct {
 	at     time.Time
 }
 type Provider struct {
-	DisableTranscode bool // Native resources are still preferred when conversion is enabled.
+	sourceIP         netip.Addr // A discovered description may only resolve to its SSDP sender.
+	DisableTranscode bool       // Native resources are still preferred when conversion is enabled.
 	ffmpegPath       string
 	conversionSlots  chan struct{}
 	description      *url.URL
@@ -87,6 +89,13 @@ func (p *Provider) ensure(ctx context.Context) error {
 	s, e := newScope(ctx, p.description, p.allowLoopback)
 	if e != nil {
 		return e
+	}
+	if p.sourceIP.IsValid() {
+		for _, ip := range s.ips {
+			if ip.Unmap() != p.sourceIP {
+				return errors.New("discovered description is outside SSDP sender")
+			}
+		}
 	}
 	client := s.client()
 	defer client.CloseIdleConnections()

@@ -4,7 +4,7 @@ Updated 5 October 2026.
 
 ## MinimServer milestone
 
-Implemented the server-side My Music → MinimServer → native server hierarchy → track lookup → playback path using a general Browse/Resolve content provider. Manual device-description URL configuration works without discovery. Paginated SOAP/DIDL browsing, native MP3/AAC resource selection followed by bounded FFmpeg FLAC → MP3 fallback, explicit HTTPS radio capability, opaque scoped LAN audio/artwork endpoints, metadata and 128-pixel JPEG logos are implemented. The authenticated dashboard browser and bounded on-demand SSDP discovery support debugging. No music files are scanned and no library is mirrored to SQLite.
+Implemented the server-side My Music → MinimServer → native server hierarchy → track lookup → playback path using a general Browse/Resolve content provider. Automatic SSDP discovery connects music servers without user-supplied URLs or ports. An optional manual device-description URL remains an administrator fallback. Linux Compose includes a host-network discovery helper while preserving the application bridge/HTTP mapping. Paginated SOAP/DIDL browsing, native MP3/AAC resource selection followed by bounded FFmpeg FLAC → MP3 fallback, explicit HTTPS radio capability, opaque scoped LAN audio/artwork endpoints, metadata and 128-pixel JPEG logos are implemented. The authenticated dashboard browser shows discovered servers automatically; Rediscover queues a bounded background refresh. No music files are scanned and no library is mirrored to SQLite.
 
 The milestone is **not yet accepted on physical hardware**. Automated fixtures cover menu traversal through Album/album/track, lookup metadata/artwork, page mappings, resource alternatives, malformed/offline servers, scoped transport/redirects, invalid/expired opaque IDs, byte-range/HEAD playback, artwork and web authentication/failure isolation. The owner reports Pure HTTPS support; this remains an explicit operator setting rather than an automatically detected capability.
 
@@ -25,6 +25,9 @@ FLAC-only CD tracks use the automatic MP3 fallback when FFmpeg is available (alr
 - Docker deployment with a persistent data volume and management authentication.
 
 ## Verification
+
+Automatic discovery coverage includes no-configuration connection, multiple advertisement identity handling, source-bound description validation, playback/artwork routing, background refresh/cancellation, offline retention/expiry, manual fallback and fresh/stale/malformed helper handoffs. A native scan on the development Mac found Music Library and Evo One, while the same code in an isolated bridge container found no servers, confirming the Docker discovery boundary. The Linux helper is intended to put discovery on the host LAN; physical acceptance on the target Linux/NAS remains required.
+
 
 The owner confirmed audible Smooth Radio playback on a physical Pure ELAN IR5 on 3 October 2026, and subsequently confirmed AAC playback. These are hardware observations, not automatic identification of every registered radio.
 

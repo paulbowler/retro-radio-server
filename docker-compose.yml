@@ -13,12 +13,30 @@ services:
       RETRO_MUSIC_SERVER_URL: ${RETRO_MUSIC_SERVER_URL:-}
       RETRO_RADIO_HTTPS: ${RETRO_RADIO_HTTPS:-false}
       RETRO_MUSIC_TRANSCODE: ${RETRO_MUSIC_TRANSCODE:-true}
+      RETRO_UPNP_DISCOVERY_FILE: /run/retro-upnp/discovery.json
     volumes:
       - retro-data:/data
+      - upnp-discovery:/run/retro-upnp:ro
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+  upnp-discovery:
+    build: .
+    image: retro-radio:local
+    command: ["-upnp-discovery-helper"]
+    network_mode: host
+    read_only: true
+    volumes:
+      - upnp-discovery:/run/retro-upnp
+    restart: unless-stopped
+    healthcheck:
+      disable: true
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
 volumes:
   retro-data:
+  upnp-discovery:

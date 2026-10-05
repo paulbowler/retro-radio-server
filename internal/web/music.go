@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"retroradio.local/server/internal/content"
-	"retroradio.local/server/internal/upnp"
 	"strconv"
 )
 
@@ -28,20 +27,16 @@ func musicPageURL(id string, offset int, trail string) string {
 }
 func (a *App) musicView(r *http.Request, v *view) {
 	if r.URL.Query().Get("discover") == "1" {
-		servers, e := upnp.Discover(r.Context())
-		v.MusicServers = servers
-		if e != nil {
-			v.MusicDiscovery = "Discovery unavailable on this network. Manual configuration still works."
-		} else if len(servers) == 0 {
-			v.MusicDiscovery = "No music servers discovered. Multicast may be blocked; use a manual device-description link."
-		} else {
-			v.MusicDiscovery = "Discovered music servers. Configure a device-description link on the server to connect."
+		if finder, ok := a.Music.(interface{ Rediscover() }); ok {
+			finder.Rediscover()
+			v.MusicDiscovery = "Looking for music servers. They will appear automatically."
 		}
 	}
 	if a.Music == nil {
-		v.Message = "No music server configured. Add its device-description link to the server configuration and restart."
+		v.Message = "Looking for music servers on your network."
 		return
 	}
+
 	object := "0"
 	if raw := r.URL.Query().Get("object"); raw != "" {
 		b, e := base64.RawURLEncoding.DecodeString(raw)
@@ -52,6 +47,7 @@ func (a *App) musicView(r *http.Request, v *view) {
 		}
 		object = string(b)
 	}
+	v.MusicRootPage = object == "0"
 	offset := 0
 	if raw := r.URL.Query().Get("offset"); raw != "" {
 		n, e := strconv.Atoi(raw)
@@ -70,8 +66,12 @@ func (a *App) musicView(r *http.Request, v *view) {
 	}
 	result, e := a.Music.Browse(r.Context(), object, offset, 24)
 	if e != nil {
-		v.Message = "Music server unavailable. Check its address and connection, then retry. Radio and podcasts are still available."
+		v.Message = "Music server unavailable. Make sure it is running, then retry. Radio and podcasts are still available."
 		v.Error = true
+		return
+	}
+	if object == "0" && result.Total == 0 {
+		v.Message = "Looking for music servers on your network. Make sure your music server is running."
 		return
 	}
 	v.MusicConnected = true

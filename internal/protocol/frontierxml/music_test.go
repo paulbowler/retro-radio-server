@@ -30,6 +30,9 @@ func (p *musicFixture) Browse(ctx context.Context, id string, offset, count int)
 	switch id {
 	case "0":
 		page.ParentID = "-1"
+		page.Items = []content.Item{{ID: "server", Title: "MinimServer", Kind: content.Folder}}
+	case "server":
+		page.ParentID = "0"
 		page.Items = []content.Item{{ID: "Album&1", Title: "Album", Kind: content.Folder}}
 	case "Album&1":
 		page.Items = []content.Item{{ID: "Kind of Blue", Title: "Kind of Blue", Kind: content.Folder}}

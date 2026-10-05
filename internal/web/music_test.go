@@ -51,7 +51,7 @@ func TestMusicWebAuthBrowsePaginationAndOutage(t *testing.T) {
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	body := w.Body.String()
-	for _, want := range []string{"Music server connected", "Album &amp; more", "So What", "Miles Davis", "Kind of Blue", "/stream/upnp/upnp_fixture", "/artwork/upnp/upnp_fixture.jpg", "offset=26"} {
+	for _, want := range []string{"Music library available", "Album &amp; more", "So What", "Miles Davis", "Kind of Blue", "/stream/upnp/upnp_fixture", "/artwork/upnp/upnp_fixture.jpg", "offset=26"} {
 		if !strings.Contains(body, want) {
 			t.Fatal(want, body)
 		}

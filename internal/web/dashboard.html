@@ -61,10 +61,11 @@
 {{define "music"}}
 <p><a class="button secondary" href="/music?discover=1" hx-get="/music?discover=1" hx-target="#content" hx-push-url="true">Find music servers</a></p>
 {{if .MusicDiscovery}}<p class="notice">{{.MusicDiscovery}}</p>{{end}}
-{{range .MusicServers}}<section class="card"><h2>Music server at {{.Address}}</h2><p class="muted">Device-description link: <code>{{.Location}}</code></p></section>{{end}}
+
 
 {{if .Message}}{{template "notice" .}}{{end}}
-{{if .MusicConnected}}<section class="card"><h2>{{.MusicTitle}}</h2><p class="success">Music server connected</p><p class="muted">The music server supplies this library. Native MP3 and AAC play directly; FLAC can be converted to MP3 when FFmpeg is available.</p><a href="{{.MusicRoot}}" hx-get="{{.MusicRoot}}" hx-target="#content" hx-push-url="true">Music server root</a>{{if .MusicParent}} · <a href="{{.MusicParent}}" hx-get="{{.MusicParent}}" hx-target="#content" hx-push-url="true">Parent folder</a>{{end}}</section>
+{{if and .MusicRootPage (not .Error)}}<div hx-get="/music" hx-trigger="every 5s" hx-target="#content"></div>{{end}}
+{{if .MusicConnected}}<section class="card"><h2>{{.MusicTitle}}</h2><p class="success">Music library available</p><p class="muted">The music server supplies this library. Native MP3 and AAC play directly; FLAC can be converted to MP3 when FFmpeg is available.</p><a href="{{.MusicRoot}}" hx-get="{{.MusicRoot}}" hx-target="#content" hx-push-url="true">Music server root</a>{{if .MusicParent}} · <a href="{{.MusicParent}}" hx-get="{{.MusicParent}}" hx-target="#content" hx-push-url="true">Parent folder</a>{{end}}</section>
 {{template "pagination" .}}<div class="grid">{{range .MusicItems}}<article class="card">{{if .ArtURL}}<img src="{{.ArtURL}}" alt="" width="128" height="128" loading="lazy">{{end}}<h3>{{.Title}}</h3>{{if .Artist}}<p>{{.Artist}}</p>{{end}}{{if .Album}}<p class="muted">{{.Album}}{{if .Duration}} · {{.Duration}}{{end}}</p>{{end}}{{if .Folder}}<a class="button secondary" href="{{.BrowseURL}}" hx-get="{{.BrowseURL}}" hx-target="#content" hx-push-url="true">Browse</a>{{else if .PlayURL}}<p class="muted">{{.Codec}}</p><audio controls preload="none" aria-label="Listen to {{.Title}}" src="{{.PlayURL}}"></audio>{{else}}<p class="muted">No compatible playback resource available.</p>{{end}}</article>{{else}}<p class="empty">This folder is empty.</p>{{end}}</div>{{template "pagination" .}}
-{{end}}<p><a class="button secondary" href="/music" hx-get="/music" hx-target="#content" hx-push-url="true">Reconnect / refresh library</a></p>
+{{end}}<p><a class="button secondary" href="/music" hx-get="/music" hx-target="#content" hx-push-url="true">Refresh music</a></p>
 {{end}}

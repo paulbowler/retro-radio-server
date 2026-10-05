@@ -12,7 +12,7 @@ Built with Go, SQLite and server-rendered HTMX. Runs in one Docker container, in
 - A shared station library available to every radio, with individual favourites.
 - Custom stations from public listening links, with automatic audio detection.
 - Radio menus for all stations, country, genre, favourites, podcasts and search.
-- My Music menus from a configured MinimServer / UPnP ContentDirectory, with paginated browsing, track details, album artwork and opaque playback links.
+- My Music menus from automatically discovered MinimServer / UPnP ContentDirectory servers, with paginated browsing, track details, album artwork and opaque playback links.
 - Podcast search, shared RSS/Atom subscriptions and hourly episode updates, with MP3/AAC playback and browser previews.
 - Automatic HTTP/HTTPS negotiation and local HTTP delivery for older radios.
 - HLS and MPEG-DASH audio converted to continuous MP3, including BBC-style streams.
@@ -77,20 +77,29 @@ Search uses the [Apple podcast catalogue](https://developer.apple.com/library/ar
 
 MinimServer remains the authoritative library: it scans the music, supplies metadata and organisation, indexes/searches it and serves source audio. Retro Radio does not scan your NAS, parse music files or mirror the library into SQLite.
 
-1. Set `RETRO_MUSIC_SERVER_URL` in `.env` to the **exact UPnP device-description URL**, for example `http://<NAS-IP>:<UPnP-port>/<description-path>`. The MinimServer configuration web page is a different endpoint; neither a bare NAS address nor a guessed path is sufficient. **My Music → Find music servers** can show SSDP description links when multicast works on the server's network. Copy the chosen link into the configuration; discovery never connects to a server automatically.
-2. Restart with `docker compose up -d --build`. The configured music server need not be online at startup.
-3. Open **My Music** on the dashboard to verify connection, folders, tracks, metadata, artwork and page navigation independently of the radio.
-4. Refresh the Pure directory, then choose **My Music → MinimServer → Album → an album → a track**. The folders underneath MinimServer come from the server, so their exact names and structure may differ.
+1. Start or update Retro Radio with `docker compose up -d --build`. On Linux/NAS, Compose starts a small LAN discovery helper alongside the application. It uses the host network for SSDP and passes discovered server descriptions through a shared, read-only handoff to the application. The application keeps its existing port mapping and database volume.
+2. With MinimServer running on the same LAN, open **My Music** on the dashboard. Music servers appear automatically by their published names, and the server list refreshes while you view it. **Find music servers** triggers an additional background search; no addresses, ports or description paths need entering.
+3. Refresh the Pure directory, then choose **My Music → your MinimServer → Album → an album → a track**. The folders underneath the server come from MinimServer, so their names and structure may differ. Multiple discovered UPnP music servers can coexist under My Music.
+
+Discovery starts in the background and repeats every 30 seconds. Brief missed announcements retain a server; one absent for five minutes is removed automatically. Radio/podcast service never waits for discovery. The helper discovers MediaServer and ContentDirectory advertisements on active multicast-capable IPv4 interfaces, avoiding dependence on one default route. Source addresses and device descriptions are checked before a server is added.
+
+The Linux discovery helper solves the bridge-network boundary without changing the radio HTTP listener. Docker Desktop uses a VM and does not offer the same LAN multicast reachability: for Mac/Windows development, running the native server on the LAN provides discovery; the helper alone does not promise Docker Desktop multicast support. VLANs or client isolation can also block discovery. These are deployment/network concerns rather than information a music listener should have to enter.
+
+<details><summary>Advanced manual fallback for isolated networks</summary>
+
+An administrator may set `RETRO_MUSIC_SERVER_URL` to the exact UPnP device-description URL if the server is intentionally on a network where discovery cannot reach it. That server remains available alongside automatic discovery. This is optional; no music URL is required for ordinary Linux/NAS deployments. The description URL is a different endpoint from the MinimServer settings web page.
+
+</details>
 
 Compatible MP3 and ADTS AAC resources are preferred. When MinimServer offers only FLAC, FFmpeg converts it on demand to MP3 at 128 kbps, 44.1 kHz, stereo. HTTP resources and converted audio use the local opaque relay; compatible native HTTPS resources can either use it or play directly. Docker already includes FFmpeg; native installs need `ffmpeg` with `libmp3lame` on `PATH`. Set `RETRO_MUSIC_TRANSCODE=false` to disable the fallback. Set `RETRO_RADIO_HTTPS=true` only if HTTPS playback is known to work on **all radios** using this directory. It permits direct HTTPS links in directory responses; the default remains false. This is an operator setting, not automatic model detection. Internal DNS names such as `music.home.paulbowler.co.uk` work for configured HTTPS description/resource URLs, with normal certificate verification. DNS alone does not supply a UPnP description path. `RETRO_PUBLIC_URL` remains the existing HTTP radio directory/relay origin; an HTTPS management address such as `https://radio.home.paulbowler.co.uk` can still be supplied by your reverse proxy.
 
-All server-fetched resources and artwork must be on the configured server hostname or one of its pinned IP addresses. Different ports on that same host are allowed (80, 443, or 1024–65535). If a reverse proxy publishes a description on one hostname but MinimServer advertises resources on a different hostname/address, the provider rejects them unless that address is the same pinned server IP. Configure the description and advertised resources consistently; this intentionally does not open access to arbitrary LAN hosts. Changing the server's DNS/IP or ContentDirectory endpoint requires a Retro Radio restart.
+All server-fetched resources and artwork must be on the configured server hostname or one of its pinned IP addresses. Different ports on that same host are allowed (80, 443, or 1024–65535). If a reverse proxy publishes a description on one hostname but MinimServer advertises resources on a different hostname/address, the provider rejects them unless that address is the same pinned server IP. Configure the description and advertised resources consistently; this intentionally does not open access to arbitrary LAN hosts. Automatically discovered endpoints are refreshed when their advertised address or location changes. A manually configured server retains its pinning until Retro Radio restarts.
 
 Native audio delivery forwards GET/HEAD and byte ranges without changing source audio. Converted FLAC starts at the beginning and does not support seeking; an initial `Range: bytes=0-` request restarts playback, while other ranges are rejected. Conversion is limited to four concurrent tracks and ends on disconnect, cancellation or source failure. Unknown and expired playback/artwork IDs cannot select arbitrary URLs. Artist, album and duration are included in the established description field; album art is delivered as the same bounded 128-pixel JPEG used for station logos. Actual display fields depend on the Pure firmware and need hardware acceptance. Music tokens are held in bounded memory, expire after 24 hours without reuse, and reset on restart; browse again to refresh links. Music favourites/presets, autoplay of the whole album, search and a mirrored music database are not part of this milestone.
 
 FLAC conversion consumes only the bytes MinimServer serves, with no NAS filesystem access, persistent converted files or metadata parsing from the audio. FFmpeg has no source URL and is restricted to a FLAC input pipe and MP3 output pipe. [MinimStreamer's documented transcoding](https://minimstreamer.com/userguide.html) was investigated first; its documented local FLAC outputs are PCM/WAV rather than a compatible MP3 resource, so this fallback closes that gap. Native resources still take priority, including any compatible resource already provided by MinimServer. WAV/FLAC direct radio decoding is not assumed. The first audible physical-Pure music test, including metadata/artwork display, remains unverified.
 
-SSDP is a best-effort, two-second manual discovery operation. Docker bridge networks, VLANs and multicast restrictions may prevent results; manual configuration is sufficient. Music requests time out independently and an unavailable server does not prevent radio/podcast browsing or server startup.
+SSDP searches last at most two seconds; server validation runs in a separate, bounded background refresh. The Linux host-network helper opens no HTTP listener and needs no elevated capabilities. Its handoff contains only transient discovery information, expires after 90 seconds and never contains the music library. Music requests time out independently and an unavailable server does not prevent radio/podcast browsing or server startup.
 
 ### Restart or upgrade
 
@@ -112,7 +121,8 @@ The database lives in a persistent Docker volume. Keep that volume when rebuildi
 | `RETRO_ADMIN_USER` | `admin` | Management username |
 | `RETRO_ADMIN_PASSWORD` | empty | Enables authentication for the web interface, REST API and support report |
 | `RETRO_CATALOGUE_URL` | DNS-discovered mirrors | Optional public Radio-Browser API origin |
-| `RETRO_MUSIC_SERVER_URL` | empty | Opt-in exact UPnP device-description URL; manual configuration works without SSDP |
+| `RETRO_MUSIC_SERVER_URL` | empty | Optional administrator fallback; normal operation discovers music servers automatically |
+| `RETRO_UPNP_DISCOVERY_FILE` | empty natively; set by Compose | Internal handoff from the Linux LAN discovery helper; configured automatically |
 | `RETRO_MUSIC_TRANSCODE` | `true` | FLAC → MP3 fallback when native compatible resources are absent and FFmpeg is available |
 | `RETRO_RADIO_HTTPS` | `false` | Operator-confirmed HTTPS playback for every radio; enables direct HTTPS directory links |
 | `RETRO_HEALTH_URL` | `http://127.0.0.1:8080/healthz` | CLI health check URL |

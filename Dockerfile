@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOMAXPROCS=2 GOGC=20 GOMEMLIMIT=512MiB go build -p 1 -trimpath -ldflags='-s -w' -o /retro-radio ./cmd/retro-radio
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates ffmpeg && addgroup -g 10001 retro && adduser -D -u 10001 -G retro retro && mkdir /data && chown retro:retro /data
+RUN apk add --no-cache ca-certificates ffmpeg && addgroup -g 10001 retro && adduser -D -u 10001 -G retro retro && mkdir -p /data /run/retro-upnp && chown retro:retro /data /run/retro-upnp
 COPY --from=build /retro-radio /usr/local/bin/retro-radio
 USER 10001:10001
 ENV RETRO_DB=/data/retro-radio.db

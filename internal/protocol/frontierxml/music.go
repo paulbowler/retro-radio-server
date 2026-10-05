@@ -46,16 +46,19 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		item := Item{Type: "Station", ID: play.Item.PlaybackID, Name: play.Item.Title, URL: playURL, Desc: strings.Join(description, " · "), Logo: text(logo), Format: "Music", Mime: play.Codec(), Bitrate: play.Bitrate(), Reliability: 5}
 		return []Item{previous, item}, 1, nil
 	}
-	if !q.Has("music") {
+	object := []byte("0")
+	if q.Has("music") {
+		var e error
+		object, e = base64.RawURLEncoding.DecodeString(q.Get("music"))
+		if e != nil || len(object) == 0 || len(object) > 2048 {
+			return nil, 0, errors.New("invalid music folder")
+		}
+	} else {
 		previous.Previous = base + "loginXML.asp?gofile="
 		previous.PreviousBackup = previous.Previous
-		link := musicLink(base, "0")
-		return []Item{previous, {Type: "Dir", Title: "MinimServer", Dir: link, Backup: link}}, 1, nil
 	}
-	object, e := base64.RawURLEncoding.DecodeString(q.Get("music"))
-	if e != nil || len(object) == 0 || len(object) > 2048 {
-		return nil, 0, errors.New("invalid music folder")
-	}
+
+	var e error
 	start, end := 1, 24
 	if q.Has("startItems") {
 		start, e = strconv.Atoi(q.Get("startItems"))

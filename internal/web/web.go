@@ -18,7 +18,6 @@ import (
 	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/store"
-	"retroradio.local/server/internal/upnp"
 	"strconv"
 	"strings"
 	"sync"
@@ -127,10 +126,10 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type view struct {
-	MusicServers                                []upnp.DiscoveredServer
 	MusicDiscovery                              string
 	MusicItems                                  []musicEntry
 	MusicTitle, MusicRoot, MusicParent          string
+	MusicRootPage                               bool
 	MusicConnected                              bool
 	Settings                                    store.Settings
 	DiscoveryID                                 string
