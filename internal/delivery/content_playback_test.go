@@ -18,6 +18,7 @@ func TestMusicOwnershipCompletionSupersedingAndExpiry(t *testing.T) {
 	relay := testRelay(t, server)
 	device, _ := relay.Store.Seen("music-radio", "pure", "", "192.168.1.20")
 	r := httptest.NewRequest("GET", "/stream/upnp/token?radio="+device.ID, nil)
+	r.Header.Set("User-Agent", "Mozilla/5.0 UPnP/1.0 DLNADOC/1.50")
 	play := content.Playback{Item: content.Item{Title: "Chan Chan", Artist: "Buena Vista Social Club", Album: "Buena Vista Social Club", Duration: "0:04:17", ArtURL: "http://music/art", PlaybackID: "upnp_test"}, Resource: content.Resource{Codec: "FLAC"}, Transcode: true}
 	finish := relay.TrackMusic(r, play)
 	entries := relay.Active()

@@ -332,3 +332,44 @@ func TestArtworkOpaqueJPEGAndHEAD(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+
+// Some clients disconnect immediately after consuming the advertised length.
+// A source read can observe that cancellation while also returning its final bytes.
+type finalCancelledRead struct{ done bool }
+
+func (r *finalCancelledRead) Read(b []byte) (int, error) {
+	if r.done {
+		return 0, context.Canceled
+	}
+	r.done = true
+	return copy(b, "0123456789"), context.Canceled
+}
+func (r *finalCancelledRead) Close() error { return nil }
+func TestMusicFinalBytesBeforeCancellationCountAsCompleted(t *testing.T) {
+	p, _, _, _ := fixture(t)
+	page, e := p.Browse(context.Background(), "0", 0, 24)
+	if e != nil {
+		t.Fatal(e)
+	}
+	original := p.client.Transport
+	p.client.Transport = roundTripMusic(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/audio" {
+			return original.RoundTrip(r)
+		}
+		return &http.Response{StatusCode: 200, ContentLength: 10, Header: http.Header{"Content-Type": {"audio/mpeg"}, "Content-Length": {"10"}}, Body: &finalCancelledRead{}, Request: r}, nil
+	})
+	started, completed := false, false
+	p.PlaybackObserver = func(*http.Request, content.Playback) func(bool) {
+		started = true
+		return func(ok bool) { completed = ok }
+	}
+	w := httptest.NewRecorder()
+	p.ServeHTTP(w, httptest.NewRequest("GET", "/stream/upnp/"+page.Items[1].PlaybackID, nil))
+	if w.Body.String() != "0123456789" || !started || !completed {
+		t.Fatal(w.Body, started, completed)
+	}
+}
+
+type roundTripMusic func(*http.Request) (*http.Response, error)
+
+func (f roundTripMusic) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

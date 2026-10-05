@@ -19,7 +19,9 @@ import (
 // the web player's device preference. Do not trust forwarded IP headers on this public route.
 func (p *Relay) beginPlayback(r *http.Request, s model.Station, h http.Header) uint64 {
 	device := ""
-	if !strings.Contains(r.UserAgent(), "Mozilla/") && r.URL.Query().Get("listener") != "web" {
+	info, finite := r.Context().Value(playbackContext{}).(playbackInfo)
+	explicitContentRadio := finite && (info.active.Kind == "Music" || info.active.Kind == "Podcast") && r.URL.Query().Get("radio") != ""
+	if r.URL.Query().Get("listener") != "web" && (!strings.Contains(r.UserAgent(), "Mozilla/") || explicitContentRadio) {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			host = r.RemoteAddr
@@ -50,7 +52,7 @@ func (p *Relay) beginPlayback(r *http.Request, s model.Station, h http.Header) u
 	p.next++
 	entry := Active{Station: s.Name, StationID: s.ID, Device: device, Since: time.Now().UTC(), Codec: s.Codec, Bitrate: bitrate, Genre: cleanMetadata(h.Get("Icy-Genre")), Description: cleanMetadata(h.Get("Icy-Description"))}
 	entry.Kind = "Radio"
-	if info, ok := r.Context().Value(playbackContext{}).(playbackInfo); ok {
+	if finite {
 		entry.Kind = info.active.Kind
 		entry.StationID = info.active.StationID
 		entry.Station = info.active.Station
@@ -177,7 +179,22 @@ func (p *Relay) TrackMusic(r *http.Request, play content.Playback) func(bool) {
 	info := playbackInfo{active: Active{Kind: "Music", StationID: play.Item.PlaybackID, Station: play.Item.Title, Description: description, Artwork: artwork}, duration: PlaybackDuration(play.Item.Duration)}
 	r = r.WithContext(context.WithValue(r.Context(), playbackContext{}, info))
 	key := p.beginPlayback(r, model.Station{Name: play.Item.Title, Codec: play.Codec(), Bitrate: play.Bitrate()}, http.Header{})
-	return func(complete bool) { p.endPlayback(key, complete) }
+	p.mu.Lock()
+	device := p.active[key].Device
+	p.mu.Unlock()
+	status := "radio not linked"
+	if device != "" {
+		status = "radio linked"
+	}
+	p.Store.Log(device, "Music stream connected", play.Item.Title+": "+status)
+	return func(complete bool) {
+		p.endPlayback(key, complete)
+		status := "transfer interrupted"
+		if complete {
+			status = "transfer complete; duration estimate retained for linked radio"
+		}
+		p.Store.Log(device, "Music stream ended", play.Item.Title+": "+status)
+	}
 }
 func nonempty(values ...string) []string {
 	out := []string{}

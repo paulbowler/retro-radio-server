@@ -407,6 +407,7 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer rc.SetWriteDeadline(time.Time{})
 	var finish func(bool)
 	complete := false
+	transferred := int64(0)
 	defer func() {
 		if finish != nil {
 			finish(complete)
@@ -417,7 +418,9 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		n, e := res.Body.Read(buf)
 		if n > 0 {
 			_ = rc.SetWriteDeadline(time.Now().Add(20 * time.Second))
-			if _, err := w.Write(buf[:n]); err != nil {
+			written, err := w.Write(buf[:n])
+			transferred += int64(written)
+			if err != nil {
 				return
 			}
 			if finish == nil && p.PlaybackObserver != nil {
@@ -426,7 +429,7 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = rc.Flush()
 		}
 		if e != nil {
-			complete = errors.Is(e, io.EOF)
+			complete = errors.Is(e, io.EOF) || (res.ContentLength > 0 && transferred >= res.ContentLength)
 			return
 		}
 	}
