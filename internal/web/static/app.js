@@ -185,3 +185,59 @@ document.addEventListener("error", event => { if (event.target.matches?.("img[da
   const error=document.getElementById("preferences-error");if(error){error.textContent="Couldn’t save settings. Please try again.";error.hidden=false;}
  });
 })();
+
+// Page navigation starts at the top; updates within a page preserve its position.
+// HTMX's disabled history cache keeps playback tokens fresh, so restore scroll
+// independently when a history miss fetches the page again.
+(() => {
+ const positions = new Map();
+ const requests = new WeakMap();
+ let current = location.pathname + location.search;
+ const key = value => {
+  const url = new URL(value, location.href);
+  return url.pathname + url.search;
+ };
+ const remember = () => {
+  positions.delete(current);
+  positions.set(current, window.scrollY);
+  if (positions.size > 100) positions.delete(positions.keys().next().value);
+ };
+ const move = (position, focus) => {
+  if (focus) document.getElementById("content")?.focus({preventScroll:true});
+  window.scrollTo({top:position, left:0, behavior:"instant"});
+ };
+ document.addEventListener("htmx:beforeRequest", event => {
+  const {target, xhr, requestConfig:config, elt} = event.detail;
+  if (target?.id !== "content" || config?.verb?.toLowerCase() !== "get") return;
+  const trigger = config.triggeringEvent;
+  // Timers, initial loads and programmatic refreshes are not navigation.
+  if (!trigger || !["click", "submit", "change", "search"].includes(trigger.type)) return;
+  remember();
+  const back = elt.closest?.("[data-page-back]");
+  requests.set(xhr, {position:back ? (positions.get(key(back.href)) || 0) : 0});
+ });
+ document.addEventListener("htmx:afterSettle", event => {
+  if (event.detail.target?.id !== "content") return;
+  const navigation = requests.get(event.detail.xhr);
+  if (!navigation) return;
+  requests.delete(event.detail.xhr);
+  current = location.pathname + location.search;
+  move(navigation.position, true);
+ });
+ document.addEventListener("htmx:pushedIntoHistory", () => {
+  current = location.pathname + location.search;
+ });
+ document.addEventListener("htmx:replacedInHistory", () => {
+  current = location.pathname + location.search;
+ });
+ window.addEventListener("popstate", () => {
+  remember();
+  current = location.pathname + location.search;
+ });
+ document.addEventListener("htmx:historyRestore", event => {
+  current = key(event.detail.path || location.href);
+  const position = positions.get(current) || 0;
+  // History cache misses settle asynchronously, unlike cache hits.
+  requestAnimationFrame(() => requestAnimationFrame(() => move(position, false)));
+ });
+})();

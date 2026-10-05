@@ -52,3 +52,5 @@ The Docker image has been built and the local service upgraded repeatedly while 
 Streams and public directory entries can change. A passing server probe is not evidence of audible playback on every radio.
 
 The Pure top level now groups Radio, Podcasts and Music, retaining all radio choices within Radio and existing endpoint compatibility. Music cards show title, artist, album and duration beside the cover, with full-width native audio controls matching station and podcast players.
+
+Nested web Back links now precede the heading, and music uses the current folder title as its page heading. Browser verification covers album navigation, section changes, pagination, explicit Back, browser Back/Forward, background refreshes and in-place saves. Album covers are 25% larger and verified at 320, 375, 390, 768 and 1280 pixel widths.

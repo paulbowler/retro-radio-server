@@ -71,6 +71,9 @@ func (a *App) musicView(r *http.Request, v *view) {
 	}
 	v.MusicConnected = true
 	v.MusicTitle = result.Title
+	if !v.MusicRootPage {
+		v.Title = result.Title
+	}
 	if result.ParentID != "" && result.ParentID != "-1" {
 		v.MusicParent = musicBrowseURL(result.ParentID, 0)
 	}
