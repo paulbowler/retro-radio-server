@@ -517,7 +517,7 @@ func (a *App) searchView(r *http.Request, v *view) {
 		return
 	}
 	if v.Mode == "library" {
-		saved, e := a.Store.Stations("")
+		saved, e := a.Store.NewestStations("")
 		if e != nil {
 			v.Error = true
 			v.Message = "Couldn’t load your library. Please try again."
@@ -857,7 +857,7 @@ func (a *App) deviceView(v *view) error {
 		return e
 	}
 	v.Device = &d
-	stations, e := a.Store.Stations("")
+	stations, e := a.Store.NewestStations("")
 	if e != nil {
 		return e
 	}

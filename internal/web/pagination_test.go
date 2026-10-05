@@ -56,7 +56,11 @@ func TestSearchAndLibraryPaginationRetainFilters(t *testing.T) {
 			if offset == 48 {
 				want = 2
 			}
-			if w.Code != 200 || strings.Count(body, "<article") != want || strings.Count(body, `aria-label="Station pages"`) != 2 || !strings.Contains(body, fmt.Sprintf("<h3>Station %02d</h3>", offset)) {
+			first := offset
+			if mode == "library" {
+				first = 49 - offset
+			}
+			if w.Code != 200 || strings.Count(body, "<article") != want || strings.Count(body, `aria-label="Station pages"`) != 2 || strings.Index(body, fmt.Sprintf("<h3>Station %02d</h3>", first)) != strings.Index(body, "<h3>") {
 				t.Fatal(mode, offset, w.Code, "incorrect pagination")
 			}
 			if !strings.Contains(body, "country=GB&amp;genre=jazz&amp;mode="+mode) || !strings.Contains(body, "q=Station") {

@@ -121,7 +121,20 @@ func (s *Store) migrate() error {
 	return s.migrateV10()
 }
 func (s *Store) Stations(search string) ([]model.Station, error) {
-	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY name`, search)
+	return s.stations(search, false)
+}
+
+// NewestStations uses the persistent, increasing station ID as insertion order.
+// Editing a station or adding another audio variant does not move it to the top.
+func (s *Store) NewestStations(search string) ([]model.Station, error) {
+	return s.stations(search, true)
+}
+func (s *Store) stations(search string, newest bool) ([]model.Station, error) {
+	order := "name"
+	if newest {
+		order = "CAST(id AS INTEGER) DESC, name"
+	}
+	rows, err := s.DB.Query(`SELECT id,name,url,stream_id,codec,bitrate,COALESCE(rb_uuid,''),source,country,tags,language,hls,homepage,favicon FROM stations WHERE instr(lower(name),lower(?))>0 ORDER BY `+order, search)
 	if err != nil {
 		return nil, err
 	}
