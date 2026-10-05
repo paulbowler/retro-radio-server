@@ -15,6 +15,7 @@ import (
 	"retroradio.local/server/internal/store"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func text(s string) *string { return &s }
@@ -66,6 +67,9 @@ type list struct {
 	Items   []Item   `xml:"Item"`
 }
 type Handler struct {
+	musicMu  sync.Mutex
+	musicIDs map[string]musicStationID
+
 	SupportsHTTPS bool // Operator-confirmed capability.
 	Music         content.Provider
 	Store         *store.Store
@@ -125,8 +129,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			count++
 		}
 	case "navxml", "favxml", "afavxml", "search":
-		if (endpoint == "navxml" && (q.Get("gofile") == "MyMusic" || q.Has("music"))) || (endpoint == "search" && q.Get("sSearchtype") == "3" && strings.HasPrefix(q.Get("Search"), "upnp_")) {
+		if (endpoint == "navxml" && (q.Get("gofile") == "MyMusic" || q.Has("music"))) || (endpoint == "search" && q.Get("sSearchtype") == "3" && h.isMusicStation(q.Get("Search"))) {
 			items, count, err = h.musicItems(r.Context(), base, q, d.Capabilities)
+			if endpoint == "search" {
+				if err != nil {
+					h.Store.Log(d.ID, "Music lookup failed", err.Error())
+				} else if len(items) > 1 {
+					h.Store.Log(d.ID, "Music lookup", items[1].Name)
+				}
+			}
 			break
 		}
 		if (endpoint == "navxml" && (q.Get("gofile") == "Podcasts" || q.Get("podcast") != "")) || (endpoint == "search" && q.Get("sSearchtype") == "5") {
@@ -157,6 +168,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 						h.Store.Log(d.ID, "Compatibility proxy", "Upstream audio relayed over HTTP")
 					}
 				}
+			}
+			if err != nil {
+				h.Store.Log(d.ID, "Station lookup failed", "The selected station ID could not be resolved")
 			}
 		} else {
 			if endpoint == "favxml" || endpoint == "afavxml" {
@@ -234,7 +248,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "XML encoding failed", 500)
 		return
 	}
-	send(w, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+string(b))
+	// All Item fields are element text, not XML attributes. Quotes are legal
+	// literal text; some legacy displays show their numeric entities verbatim.
+	body := strings.ReplaceAll(string(b), "&#39;", "'")
+	body = strings.ReplaceAll(body, "&#34;", `"`)
+	send(w, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`+body)
 }
 func ValidateBase(raw string) error {
 	u, err := url.Parse(raw)
