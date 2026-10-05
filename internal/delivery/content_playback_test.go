@@ -2,6 +2,7 @@
 package delivery
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -77,5 +78,37 @@ func TestPodcastMetadataPersistsAfterBuffering(t *testing.T) {
 	entries := relay.Active()
 	if w.Code != 200 || len(entries) != 1 || entries[0].Kind != "Podcast" || entries[0].Station != "The Episode" || entries[0].Description != "The Show" || entries[0].Device != device.ID {
 		t.Fatal(w.Code, entries)
+	}
+}
+
+func TestMusicClientReleaseKeepsEstimateButUpstreamFailureClears(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	relay := testRelay(t, server)
+	device, _ := relay.Store.Seen("buffering-radio", "pure", "", "192.168.1.24")
+	play := content.Playback{Item: content.Item{PlaybackID: "upnp_buffered", Title: "Midnight Sun", Duration: "0:06:29.952"}, Resource: content.Resource{Codec: "MP3"}}
+	request := httptest.NewRequest("GET", "/stream/upnp/upnp_buffered?radio="+device.ID, nil)
+	ctx, cancel := context.WithCancel(request.Context())
+	finish := relay.TrackMusic(request.WithContext(ctx), play)
+	cancel()
+	finish(false)
+	active := relay.Active()
+	if len(active) != 1 || active[0].Station != "Midnight Sun" || active[0].Device != device.ID || active[0].Until.IsZero() {
+		t.Fatal("client release erased buffered playback", active)
+	}
+	// The next selection replaces the estimate and a source failure removes it.
+	finish = relay.TrackMusic(request, play)
+	finish(false)
+	if len(relay.Active()) != 0 {
+		t.Fatal("upstream failure retained playback")
+	}
+	// Web audio cannot create a retained radio estimate on cancellation.
+	web := httptest.NewRequest("GET", "/stream/upnp/upnp_buffered?radio="+device.ID+"&listener=web", nil)
+	ctx, cancel = context.WithCancel(web.Context())
+	finish = relay.TrackMusic(web.WithContext(ctx), play)
+	cancel()
+	finish(false)
+	if len(relay.Active()) != 0 {
+		t.Fatal("web release assigned to radio")
 	}
 }

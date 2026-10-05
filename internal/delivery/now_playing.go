@@ -3,6 +3,7 @@ package delivery
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net"
 	"net/http"
@@ -188,10 +189,15 @@ func (p *Relay) TrackMusic(r *http.Request, play content.Playback) func(bool) {
 	}
 	p.Store.Log(device, "Music stream connected", play.Item.Title+": "+status)
 	return func(complete bool) {
-		p.endPlayback(key, complete)
+		// The Pure may close a buffered/range request while continuing playback.
+		// Client cancellation cannot be treated as a confirmed device stop.
+		released := errors.Is(r.Context().Err(), context.Canceled)
+		p.endPlayback(key, complete || released)
 		status := "transfer interrupted"
 		if complete {
 			status = "transfer complete; duration estimate retained for linked radio"
+		} else if released {
+			status = "client released connection; duration estimate retained for linked radio"
 		}
 		p.Store.Log(device, "Music stream ended", play.Item.Title+": "+status)
 	}

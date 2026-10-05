@@ -199,3 +199,5 @@ Nested web pages place their Back link above the title. Opening a folder, switch
 Dashboard radio cards show station, podcast or music playback through Retro Radio. Music includes artist/album details and available artwork; podcasts show the episode and show title. Completed downloads remain visible for the supplied track/episode duration because the radio may still be playing buffered audio. This is an estimate: a local pause/stop after buffering is not observable, and unknown-duration media is shown only while its stream is connected. Web playback is excluded.
 
 Music and podcast media clients carrying a valid radio ID remain attributable even if they use a browser-style user agent. Web players explicitly opt out with `listener=web`. Music stream activity records whether a radio was linked and whether the transfer completed, to help diagnose missing dashboard status.
+
+Music status also retains the known-duration estimate when a radio releases a media connection while playing buffered audio. A client disconnect is not proof that the radio stopped; source failures still clear their own playback record.
