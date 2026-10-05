@@ -92,7 +92,7 @@ func (p *Provider) openConverted(parent context.Context, resource content.Resour
 	}
 	return &convertedReader{Reader: reader, close: cleanup}, nil
 }
-func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, resource content.Resource) {
+func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, play content.Playback) {
 	// A converted byte stream has different offsets from the original file.
 	// Browsers commonly request bytes=0- for initial playback; that restarts at zero.
 	if raw := r.Header.Get("Range"); raw != "" && raw != "bytes=0-" {
@@ -106,7 +106,7 @@ func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, resour
 		w.WriteHeader(200)
 		return
 	}
-	audio, e := p.openConverted(r.Context(), resource)
+	audio, e := p.openConverted(r.Context(), play.Resource)
 	if e != nil {
 		http.Error(w, "music conversion unavailable", 502)
 		return
@@ -116,6 +116,13 @@ func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, resour
 	w.WriteHeader(200)
 	rc := http.NewResponseController(w)
 	defer rc.SetWriteDeadline(time.Time{})
+	var finish func(bool)
+	complete := false
+	defer func() {
+		if finish != nil {
+			finish(complete)
+		}
+	}()
 	buf := make([]byte, 32<<10)
 	for {
 		n, e := audio.Read(buf)
@@ -124,9 +131,13 @@ func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, resour
 			if _, err := w.Write(buf[:n]); err != nil {
 				return
 			}
+			if finish == nil && p.PlaybackObserver != nil {
+				finish = p.PlaybackObserver(r, play)
+			}
 			_ = rc.Flush()
 		}
 		if e != nil {
+			complete = errors.Is(e, io.EOF)
 			return
 		}
 	}

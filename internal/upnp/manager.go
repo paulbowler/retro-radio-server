@@ -26,6 +26,7 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
+	PlaybackObserver func(*http.Request, content.Playback) func(bool)
 	DisableTranscode bool
 	mu               sync.RWMutex
 	servers          map[string]musicServer
@@ -159,6 +160,7 @@ schedule:
 				}
 				p.sourceIP = source.Unmap()
 				p.DisableTranscode = m.DisableTranscode
+				p.PlaybackObserver = m.PlaybackObserver
 				probe, cancel := context.WithTimeout(ctx, 5*time.Second)
 				defer cancel()
 				if e = p.ensure(probe); e != nil {
@@ -289,4 +291,12 @@ func (m *Manager) ServeArtwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.provider.ServeArtwork(w, r)
+}
+
+// SetPlaybackObserver is configured before background discovery starts.
+func (m *Manager) SetPlaybackObserver(observer func(*http.Request, content.Playback) func(bool)) {
+	m.PlaybackObserver = observer
+	for _, s := range m.snapshot() {
+		s.provider.PlaybackObserver = observer
+	}
 }

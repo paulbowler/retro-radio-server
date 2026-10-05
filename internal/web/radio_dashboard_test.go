@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"retroradio.local/server/internal/catalogue"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/store"
 	"strings"
 	"testing"
@@ -67,5 +69,40 @@ func TestRadioDashboardFavouritesLastContactAndLiveRefresh(t *testing.T) {
 		if w.Code != want {
 			t.Fatal(path, w.Code)
 		}
+	}
+}
+
+func TestDashboardShowsMusicAndPodcasts(t *testing.T) {
+	db, e := store.Open(filepath.Join(t.TempDir(), "sources.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.DB.Close()
+	musicRadio, _ := db.Seen("music-kitchen", "pure", "", "192.168.1.60")
+	podcastRadio, _ := db.Seen("podcast-bedroom", "pure", "", "192.168.1.61")
+	relay := delivery.New(db)
+	play := content.Playback{Item: content.Item{PlaybackID: "upnp_dashboard", Title: "Chan Chan", Artist: "Buena Vista Social Club", Album: "Buena Vista Social Club", Duration: "4:17", ArtURL: "http://music/cover"}, Resource: content.Resource{Codec: "MP3", Bitrate: 128}}
+	finish := relay.TrackMusic(httptest.NewRequest("GET", "/stream/upnp/upnp_dashboard?radio="+musicRadio.ID, nil), play)
+	finish(true)
+	show, e := db.SavePodcast(model.Podcast{Title: "The News Quiz", Feed: "https://feeds.example/show"}, []model.Episode{{GUID: "episode", Title: "The latest episode", URL: "https://audio.example/episode.mp3", Codec: "MP3", Duration: "28:00"}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	episodes, _ := db.Episodes(show.ID)
+	relay.Client = &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Request: r, Header: http.Header{"Content-Type": {"audio/mpeg"}, "Content-Length": {"5"}}, Body: io.NopCloser(strings.NewReader("audio"))}, nil
+	})}
+	relay.ServeEpisode(httptest.NewRecorder(), httptest.NewRequest("GET", "/episode/"+episodes[0].ID+"?radio="+podcastRadio.ID, nil))
+	app := &App{Store: db, Relay: relay, Base: "http://radio.local"}
+	w := httptest.NewRecorder()
+	app.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/dashboard/live", nil))
+	for _, want := range []string{"Chan Chan", "Buena Vista Social Club", "/artwork/upnp/upnp_dashboard.jpg", "Music", "The latest episode", "The News Quiz", "Podcast"} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Fatal("missing", want, w.Body)
+		}
+	}
+	v, _ := app.baseView(httptest.NewRequest("GET", "/", nil))
+	if e = app.dashboardView(&v); e != nil || v.PlayingRadios != 2 {
+		t.Fatal(e, v.PlayingRadios)
 	}
 }

@@ -83,7 +83,7 @@ func TestConvertedRangeAndHEAD(t *testing.T) {
 		req := httptest.NewRequest(test.method, "/stream/upnp/test", nil)
 		req.Header.Set("Range", test.rangeHeader)
 		w := httptest.NewRecorder()
-		p.serveConverted(w, req, content.Resource{Codec: "FLAC"})
+		p.serveConverted(w, req, content.Playback{Resource: content.Resource{Codec: "FLAC"}})
 		if w.Code != test.code {
 			t.Fatal(w.Code, test)
 		}
@@ -130,12 +130,20 @@ func TestGeneratedFLACPlayback(t *testing.T) {
 	if e != nil || !play.Transcode || play.Direct || play.Codec() != "MP3" || play.Bitrate() != 128 {
 		t.Fatal(play, e)
 	}
+	observed, completed := false, false
+	p.PlaybackObserver = func(r *http.Request, play content.Playback) func(bool) {
+		observed = play.Transcode && play.Codec() == "MP3" && play.Bitrate() == 128
+		return func(ok bool) { completed = ok }
+	}
 	req := httptest.NewRequest("GET", "/stream/upnp/"+page.Items[0].PlaybackID, nil)
 	req.Header.Set("Range", "bytes=0-")
 	w := httptest.NewRecorder()
 	p.ServeHTTP(w, req)
 	if w.Code != 200 || w.Header().Get("Content-Type") != "audio/mpeg" || w.Body.Len() < 4096 || w.Header().Get("Accept-Ranges") != "none" {
 		t.Fatal(w.Code, w.Header(), w.Body.Len())
+	}
+	if !observed || !completed {
+		t.Fatal("converted audio not tracked", observed, completed)
 	}
 	decode := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "mp3", "-i", "pipe:0", "-f", "s16le", "pipe:1")
 	decode.Stdin = bytes.NewReader(w.Body.Bytes())

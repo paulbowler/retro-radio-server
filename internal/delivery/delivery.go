@@ -181,6 +181,9 @@ func (p *Relay) request(req *http.Request) (*http.Response, error) {
 }
 
 type Active struct {
+	Kind        string    `json:"kind,omitempty"`
+	Artwork     string    `json:"artwork,omitempty"`
+	Until       time.Time `json:"estimated_until,omitempty"`
 	StationID   string    `json:"station_id,omitempty"`
 	Device      string    `json:"device,omitempty"`
 	Title       string    `json:"title,omitempty"`
@@ -208,7 +211,11 @@ func (p *Relay) Active() []Active {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := []Active{}
-	for _, a := range p.active {
+	for id, a := range p.active {
+		if !a.Until.IsZero() && time.Now().After(a.Until) {
+			delete(p.active, id)
+			continue
+		}
 		out = append(out, a)
 	}
 	return out
@@ -240,6 +247,9 @@ func (p *Relay) ServeEpisode(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	show, _ := p.Store.Podcast(ep.PodcastID)
+	info := playbackInfo{active: Active{Kind: "Podcast", StationID: ep.ID, Station: ep.Title, Description: show.Title}, duration: PlaybackDuration(ep.Duration)}
+	r = r.WithContext(context.WithValue(r.Context(), playbackContext{}, info))
 	p.ServeAudio(w, r, model.Station{Name: ep.Title, URL: ep.URL, Codec: ep.Codec})
 }
 
@@ -293,12 +303,11 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 		return
 	}
 	key := p.beginPlayback(r, s, res.Header)
+	complete := false
 	observer := newICYObserver(res.Header.Get("Icy-MetaInt"), func(title string) { p.observeMetadata(key, title) })
 	p.Store.Log("", "Stream connected", s.Name+": "+res.Request.URL.Scheme+" upstream relayed over HTTP")
 	defer func() {
-		p.mu.Lock()
-		delete(p.active, key)
-		p.mu.Unlock()
+		p.endPlayback(key, complete)
 		p.Store.Log("", "Stream disconnected", s.Name)
 	}()
 	rc := http.NewResponseController(w)
@@ -319,6 +328,7 @@ func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Stati
 			}
 		}
 		if readErr != nil {
+			complete = errors.Is(readErr, io.EOF)
 			if !errors.Is(readErr, io.EOF) && r.Context().Err() == nil {
 				p.Store.Log("", "Stream interrupted", s.Name)
 			}

@@ -86,7 +86,7 @@ func (a *App) musicView(r *http.Request, v *view) {
 			entry.BrowseURL = musicBrowseURL(item.ID, 0)
 		} else {
 			if item.PlaybackCodec != "" {
-				entry.PlayURL = "/stream/upnp/" + item.PlaybackID
+				entry.PlayURL = "/stream/upnp/" + item.PlaybackID + "?listener=web"
 			}
 		}
 		v.MusicItems = append(v.MusicItems, entry)

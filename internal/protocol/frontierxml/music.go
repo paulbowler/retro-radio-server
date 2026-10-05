@@ -37,9 +37,7 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		previous.Previous = musicLink(base, play.Item.ParentID)
 		previous.PreviousBackup = previous.Previous
 		playURL := h.Base + "/stream/upnp/" + play.Item.PlaybackID
-		if play.Direct {
-			playURL = play.Resource.URL
-		}
+
 		description := []string{}
 		for _, detail := range []string{play.Item.Artist, play.Item.Album, play.Item.Duration} {
 			if detail != "" {

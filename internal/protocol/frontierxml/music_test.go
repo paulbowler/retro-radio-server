@@ -103,13 +103,13 @@ func TestMusicMenuHierarchyPaginationMetadataAndLookup(t *testing.T) {
 	}
 	lookup := get(base + "Search.asp?sSearchtype=3&Search=" + url.QueryEscape(stationID))
 	item := lookup.Items[1]
-	if item.ID != stationID || item.Format != "Radio" || item.Name != `Midnight Sun 'live' "mix"` || item.URL != h.Base+"/stream/upnp/upnp_fixture" || item.Logo == nil || *item.Logo != h.Base+"/artwork/upnp/upnp_fixture.jpg" || !strings.Contains(item.Desc, "Miles Davis") || !strings.Contains(item.Desc, "Kind of Blue") || item.Mime != "MP3" {
+	if item.ID != stationID || item.Format != "Radio" || item.Name != `Midnight Sun 'live' "mix"` || !strings.HasPrefix(item.URL, h.Base+"/stream/upnp/upnp_fixture?radio=") || item.Logo == nil || *item.Logo != h.Base+"/artwork/upnp/upnp_fixture.jpg" || !strings.Contains(item.Desc, "Miles Davis") || !strings.Contains(item.Desc, "Kind of Blue") || item.Mime != "MP3" {
 		t.Fatal(item)
 	}
 	h.SupportsHTTPS = true
 	p.direct = true
 	lookup = get(base + "Search.asp?sSearchtype=3&Search=upnp_fixture")
-	if lookup.Items[1].URL != "https://music.home/audio" {
+	if !strings.HasPrefix(lookup.Items[1].URL, h.Base+"/stream/upnp/upnp_fixture?radio=") {
 		t.Fatal(lookup)
 	}
 	p.fail = true

@@ -140,6 +140,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					h.Store.Log(d.ID, "Music lookup failed", err.Error())
 				} else if len(items) > 1 {
+					items[1].URL += "?radio=" + url.QueryEscape(d.ID)
 					h.Store.Log(d.ID, "Music lookup", items[1].Name)
 				}
 			}

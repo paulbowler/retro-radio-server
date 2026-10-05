@@ -460,6 +460,7 @@ func (a *App) dashboardView(v *view) error {
 		}
 		if radio.Playing != nil {
 			v.PlayingRadios++
+			radio.Image = radio.Playing.Artwork
 			for _, station := range stations {
 				if station.ID == radio.Playing.StationID {
 					radio.Image = "/stations/" + station.ID + "/artwork"

@@ -2,9 +2,12 @@
 package delivery
 
 import (
+	"context"
+	"math"
 	"net"
 	"net/http"
 	"regexp"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/model"
 	"strconv"
 	"strings"
@@ -45,7 +48,27 @@ func (p *Relay) beginPlayback(r *http.Request, s model.Station, h http.Header) u
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.next++
-	p.active[p.next] = Active{Station: s.Name, StationID: s.ID, Device: device, Since: time.Now().UTC(), Codec: s.Codec, Bitrate: bitrate, Genre: cleanMetadata(h.Get("Icy-Genre")), Description: cleanMetadata(h.Get("Icy-Description"))}
+	entry := Active{Station: s.Name, StationID: s.ID, Device: device, Since: time.Now().UTC(), Codec: s.Codec, Bitrate: bitrate, Genre: cleanMetadata(h.Get("Icy-Genre")), Description: cleanMetadata(h.Get("Icy-Description"))}
+	entry.Kind = "Radio"
+	if info, ok := r.Context().Value(playbackContext{}).(playbackInfo); ok {
+		entry.Kind = info.active.Kind
+		entry.StationID = info.active.StationID
+		entry.Station = info.active.Station
+		entry.Description = info.active.Description
+		entry.Artwork = info.active.Artwork
+		if info.duration > 0 && device != "" {
+			entry.Until = entry.Since.Add(info.duration)
+		}
+	}
+	if device != "" {
+		for id, old := range p.active {
+			if old.Device == device && !old.Until.IsZero() {
+				delete(p.active, id)
+			}
+		}
+	}
+	p.active[p.next] = entry
+
 	return p.next
 }
 
@@ -135,4 +158,60 @@ func (o *icyObserver) Process(data []byte, strip bool) []byte {
 		return audio
 	}
 	return original
+}
+
+type playbackContext struct{}
+type playbackInfo struct {
+	active   Active
+	duration time.Duration
+}
+
+// TrackMusic starts only when audio bytes have been delivered, never for artwork,
+// metadata lookups, HEAD requests or failed streams. Attribution shares radio rules.
+func (p *Relay) TrackMusic(r *http.Request, play content.Playback) func(bool) {
+	description := strings.Join(nonempty(play.Item.Artist, play.Item.Album), " · ")
+	artwork := ""
+	if play.Item.ArtURL != "" {
+		artwork = "/artwork/upnp/" + play.Item.PlaybackID + ".jpg"
+	}
+	info := playbackInfo{active: Active{Kind: "Music", StationID: play.Item.PlaybackID, Station: play.Item.Title, Description: description, Artwork: artwork}, duration: PlaybackDuration(play.Item.Duration)}
+	r = r.WithContext(context.WithValue(r.Context(), playbackContext{}, info))
+	key := p.beginPlayback(r, model.Station{Name: play.Item.Title, Codec: play.Codec(), Bitrate: play.Bitrate()}, http.Header{})
+	return func(complete bool) { p.endPlayback(key, complete) }
+}
+func nonempty(values ...string) []string {
+	out := []string{}
+	for _, v := range values {
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+func PlaybackDuration(raw string) time.Duration {
+	parts := strings.Split(strings.TrimSpace(raw), ":")
+	if len(parts) == 0 || len(parts) > 3 {
+		return 0
+	}
+	seconds := float64(0)
+	for _, part := range parts {
+		n, e := strconv.ParseFloat(part, 64)
+		if e != nil || n < 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+			return 0
+		}
+		seconds = seconds*60 + n
+	}
+	if seconds <= 0 || seconds > 86400 {
+		return 0
+	}
+	return time.Duration(seconds * float64(time.Second))
+}
+func (p *Relay) endPlayback(key uint64, complete bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	current, ok := p.active[key]
+	if ok && complete && current.Device != "" && !current.Until.IsZero() && time.Now().Before(current.Until) {
+		return
+	}
+	delete(p.active, key)
 }

@@ -32,6 +32,7 @@ type token struct {
 	at     time.Time
 }
 type Provider struct {
+	PlaybackObserver func(*http.Request, content.Playback) func(bool)
 	sourceIP         netip.Addr // A discovered description may only resolve to its SSDP sender.
 	DisableTranscode bool       // Native resources are still preferred when conversion is enabled.
 	ffmpegPath       string
@@ -359,7 +360,7 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if play.Transcode {
-		p.serveConverted(w, r, play.Resource)
+		p.serveConverted(w, r, play)
 		return
 	}
 	req, e := http.NewRequestWithContext(r.Context(), r.Method, play.Resource.URL, nil)
@@ -404,6 +405,13 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rc := http.NewResponseController(w)
 	defer rc.SetWriteDeadline(time.Time{})
+	var finish func(bool)
+	complete := false
+	defer func() {
+		if finish != nil {
+			finish(complete)
+		}
+	}()
 	buf := make([]byte, 32<<10)
 	for {
 		n, e := res.Body.Read(buf)
@@ -412,9 +420,13 @@ func (p *Provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if _, err := w.Write(buf[:n]); err != nil {
 				return
 			}
+			if finish == nil && p.PlaybackObserver != nil {
+				finish = p.PlaybackObserver(r, play)
+			}
 			_ = rc.Flush()
 		}
 		if e != nil {
+			complete = errors.Is(e, io.EOF)
 			return
 		}
 	}

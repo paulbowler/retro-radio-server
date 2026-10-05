@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/model"
 	"strings"
 	"sync"
@@ -185,5 +186,38 @@ func TestEmptyAdvertisedLibraryHiddenAndLaterAvailable(t *testing.T) {
 	m.Refresh(context.Background())
 	if len(m.snapshot()) != 0 {
 		t.Fatal("empty library was retained")
+	}
+}
+
+func TestMusicPlaybackObserverOnlyForDeliveredAudio(t *testing.T) {
+	m, _ := automaticFixture(t)
+	starts, completions := 0, 0
+	m.SetPlaybackObserver(func(r *http.Request, p content.Playback) func(bool) {
+		starts++
+		if p.Item.Title == "" {
+			t.Fatal("missing metadata")
+		}
+		return func(complete bool) {
+			if complete {
+				completions++
+			}
+		}
+	})
+	m.Refresh(context.Background())
+	root, _ := m.Browse(context.Background(), "0", 0, 24)
+	tracks, e := m.Browse(context.Background(), root.Items[0].ID, 0, 24)
+	if e != nil {
+		t.Fatal(e)
+	}
+	path := "/stream/upnp/" + tracks.Items[1].PlaybackID
+	m.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("HEAD", path, nil))
+	m.ServeArtwork(httptest.NewRecorder(), httptest.NewRequest("GET", "/artwork/upnp/"+tracks.Items[1].PlaybackID+".jpg", nil))
+	m.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/stream/upnp/missing", nil))
+	if starts != 0 {
+		t.Fatal("non-audio request counted")
+	}
+	m.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+	if starts != 1 || completions != 1 {
+		t.Fatal(starts, completions)
 	}
 }
