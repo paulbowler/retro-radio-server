@@ -53,9 +53,14 @@ func TestRadioDashboardFavouritesLastContactAndLiveRefresh(t *testing.T) {
 	if err = page.ExecuteTemplate(&html, "dashboard-status", v); err != nil {
 		t.Fatal(err)
 	}
-	for _, text := range []string{"Playing now", "Test Radio", "Artist &lt;script&gt; — Song", "192 kbps", "Listening for 9 min", "data-station-artwork"} {
+	for _, text := range []string{"Playing now", "Test Radio", "Artist &lt;script&gt; — Song", "data-station-artwork"} {
 		if !strings.Contains(html.String(), text) {
 			t.Fatalf("missing %q", text)
+		}
+	}
+	for _, unwanted := range []string{"192 kbps", "AAC", "Listening for"} {
+		if strings.Contains(html.String(), unwanted) {
+			t.Fatalf("technical detail remains: %q", unwanted)
 		}
 	}
 	// The image endpoint cannot be used to fetch arbitrary links or local targets.
@@ -104,5 +109,64 @@ func TestDashboardShowsMusicAndPodcasts(t *testing.T) {
 	v, _ := app.baseView(httptest.NewRequest("GET", "/", nil))
 	if e = app.dashboardView(&v); e != nil || v.PlayingRadios != 2 {
 		t.Fatal(e, v.PlayingRadios)
+	}
+}
+
+func TestDashboardUnchangedRefreshAndChangedPlayback(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "refresh.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DB.Close()
+	radio, _ := db.Seen("refresh-radio", "pure", "", "192.168.1.60")
+	relay := delivery.New(db)
+	app := &App{Store: db, Relay: relay, Base: "http://radio.local"}
+	handler := app.Handler()
+	initial := httptest.NewRecorder()
+	handler.ServeHTTP(initial, httptest.NewRequest("GET", "/", nil))
+	v, _ := app.baseView(httptest.NewRequest("GET", "/", nil))
+	if err := app.dashboardView(&v); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(initial.Body.String(), `data-dashboard-version="`+v.DashboardVersion+`"`) {
+		t.Fatal("initial version missing")
+	}
+	refresh := func(version string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/dashboard/live", nil)
+		r.Header.Set("X-Dashboard-Version", version)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	unchanged := refresh(v.DashboardVersion)
+	if unchanged.Code != http.StatusNoContent || unchanged.Body.Len() != 0 {
+		t.Fatal("unchanged cards replaced", unchanged.Code, unchanged.Body)
+	}
+	play := content.Playback{Item: content.Item{PlaybackID: "upnp_refresh", Title: "First track", Duration: "4:17"}, Resource: content.Resource{Codec: "MP3", Bitrate: 128}}
+	selectTrack := func() {
+		relay.TrackMusic(httptest.NewRequest("GET", "/stream/upnp/upnp_refresh?radio="+radio.ID, nil), play)(true)
+	}
+	selectTrack()
+	changed := refresh(v.DashboardVersion)
+	version := changed.Header().Get("X-Dashboard-Version")
+	if changed.Code != 200 || version == v.DashboardVersion || !strings.Contains(changed.Body.String(), "First track") {
+		t.Fatal("new playback missing", changed.Code, changed.Body)
+	}
+	// Reconnections and technical-only changes must not replace visible cards.
+	play.Resource.Bitrate = 192
+	selectTrack()
+	if w := refresh(version); w.Code != http.StatusNoContent {
+		t.Fatal("bookkeeping triggered refresh", w.Body)
+	}
+	play.Item.Title = "Next track"
+	selectTrack()
+	if w := refresh(version); w.Code != 200 || !strings.Contains(w.Body.String(), "Next track") {
+		t.Fatal("track change missing", w.Body)
+	}
+	play.Item.Duration = "0:00:00.001"
+	selectTrack()
+	time.Sleep(5 * time.Millisecond)
+	if w := refresh(version); w.Code != 200 || strings.Contains(w.Body.String(), "Playing now</p>") {
+		t.Fatal("playback expiry missing", w.Code, w.Body)
 	}
 }

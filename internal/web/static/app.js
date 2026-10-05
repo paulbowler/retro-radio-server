@@ -241,3 +241,17 @@ document.addEventListener("error", event => { if (event.target.matches?.("img[da
   requestAnimationFrame(() => requestAnimationFrame(() => move(position, false)));
  });
 })();
+
+// Background dashboard checks leave existing cards and loaded artwork untouched.
+document.addEventListener("htmx:configRequest", event => {
+ const dashboard = event.detail.elt;
+ if (dashboard?.id === "dashboard-live" && dashboard.dataset.dashboardVersion) {
+  event.detail.headers["X-Dashboard-Version"] = dashboard.dataset.dashboardVersion;
+ }
+});
+document.addEventListener("htmx:afterSwap", event => {
+ const dashboard = event.detail.target;
+ if (dashboard?.id !== "dashboard-live") return;
+ const version = event.detail.xhr?.getResponseHeader("X-Dashboard-Version");
+ if (version) dashboard.dataset.dashboardVersion = version;
+});

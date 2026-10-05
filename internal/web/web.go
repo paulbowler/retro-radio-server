@@ -135,6 +135,7 @@ type view struct {
 	DiscoveryCursor                             int
 	Radios                                      []radioOverview
 	PlayingRadios                               int
+	DashboardVersion                            string
 	Podcasts                                    []model.Podcast
 	Podcast                                     *model.Podcast
 	Episodes                                    []model.Episode
@@ -470,6 +471,12 @@ func (a *App) dashboardView(v *view) error {
 		}
 		v.Radios = append(v.Radios, radio)
 	}
+	// Hash only visible content, so connection bookkeeping cannot trigger a swap.
+	var status bytes.Buffer
+	if err := page.ExecuteTemplate(&status, "dashboard-status", *v); err != nil {
+		return err
+	}
+	v.DashboardVersion = fmt.Sprintf("%x", sha256.Sum256(status.Bytes()))
 	return nil
 }
 func (a *App) dashboardLive(w http.ResponseWriter, r *http.Request) {
@@ -479,6 +486,12 @@ func (a *App) dashboardLive(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		http.Error(w, "Couldn’t load the overview. Please try again.", 503)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Dashboard-Version", v.DashboardVersion)
+	if r.Header.Get("X-Dashboard-Version") == v.DashboardVersion {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	render(w, "dashboard-status", v)

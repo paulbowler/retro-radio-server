@@ -201,3 +201,5 @@ Dashboard radio cards show station, podcast or music playback through Retro Radi
 Music and podcast media clients carrying a valid radio ID remain attributable even if they use a browser-style user agent. Web players explicitly opt out with `listener=web`. Music stream activity records whether a radio was linked and whether the transfer completed, to help diagnose missing dashboard status.
 
 Music status also retains the known-duration estimate when a radio releases a media connection while playing buffered audio. A client disconnect is not proof that the radio stopped; source failures still clear their own playback record.
+
+Dashboard playing cards show artwork and station, programme or track details. Background checks update the cards only when their visible content changes.
