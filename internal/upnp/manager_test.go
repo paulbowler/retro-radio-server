@@ -4,10 +4,13 @@ package upnp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"retroradio.local/server/internal/model"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -138,5 +141,49 @@ func TestManagerBackgroundDiscoveryAndCoalescedRefresh(t *testing.T) {
 	wg.Wait()
 	if len(m.snapshot()) != 1 {
 		t.Fatal("automatic startup discovery missing")
+	}
+}
+
+func TestEmptyAdvertisedLibraryHiddenAndLaterAvailable(t *testing.T) {
+	var available atomic.Bool
+	var broken atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/description.xml" {
+			fmt.Fprint(w, `<root><device><friendlyName>Player with optional library</friendlyName><serviceList><service><serviceType>urn:schemas-upnp-org:service:ContentDirectory:1</serviceType><controlURL>/control</controlURL></service></serviceList></device></root>`)
+			return
+		}
+		if broken.Load() {
+			http.Error(w, "offline", 503)
+			return
+		}
+		if available.Load() {
+			fmt.Fprint(w, soap(didlOpen+container("album", "0", "Album")+`</DIDL-Lite>`, 1, 1))
+		} else {
+			fmt.Fprint(w, soap(didlOpen+`</DIDL-Lite>`, 0, 0))
+		}
+	}))
+	defer server.Close()
+	m, c := automaticFixture(t)
+	c.Location = server.URL + "/description.xml"
+	m.discover = func(context.Context) ([]DiscoveredServer, error) { return []DiscoveredServer{c}, nil }
+	m.Refresh(context.Background())
+	if len(m.snapshot()) != 0 {
+		t.Fatal("empty renderer appeared as a music source")
+	}
+	available.Store(true)
+	m.Refresh(context.Background())
+	if len(m.snapshot()) != 1 {
+		t.Fatal("newly available library was not discovered")
+	}
+	broken.Store(true)
+	m.Refresh(context.Background())
+	if len(m.snapshot()) != 1 {
+		t.Fatal("temporary browse error erased working library")
+	}
+	broken.Store(false)
+	available.Store(false)
+	m.Refresh(context.Background())
+	if len(m.snapshot()) != 0 {
+		t.Fatal("empty library was retained")
 	}
 }

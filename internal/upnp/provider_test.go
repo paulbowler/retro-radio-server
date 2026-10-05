@@ -67,6 +67,8 @@ func fixture(t *testing.T) (*Provider, *httptest.Server, *[]browseRequest, *sync
 				} else {
 					fmt.Fprint(w, soap(didlOpen+container(req.Object, "0", "Album")+`</DIDL-Lite>`, 1, 1))
 				}
+			} else if req.Count == 1 {
+				fmt.Fprint(w, soap(didlOpen+container("album", "0", "Kind of Blue")+`</DIDL-Lite>`, 1, 1000))
 			} else {
 				fmt.Fprint(w, soap(didlOpen+container("album", "0", "Kind of Blue")+track(server.URL)+`</DIDL-Lite>`, 2, 1000))
 			}

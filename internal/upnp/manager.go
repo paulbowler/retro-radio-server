@@ -114,6 +114,7 @@ func (m *Manager) Refresh(parent context.Context) {
 		locations[s.provider.description.String()] = s.key
 	}
 	additions := map[string]musicServer{}
+	empty := map[string]bool{}
 	// At most 16 descriptions, four concurrently, with the same total refresh deadline.
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -165,6 +166,20 @@ schedule:
 				} // Only valid, source-bound ContentDirectory devices become browseable.
 				s = musicServer{key: key, provider: p}
 			}
+			// Some renderers expose an empty ContentDirectory. Probe only one root
+			// entry, without traversing or indexing the library.
+			probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			root, e := s.provider.browse(probe, "0", "BrowseDirectChildren", 0, 1)
+			if e != nil {
+				return
+			} // Temporary errors retain previously working servers.
+			if root.Total == 0 {
+				mu.Lock()
+				empty[key] = true
+				mu.Unlock()
+				return
+			}
 			s.seen = m.now()
 			mu.Lock()
 			additions[key] = s
@@ -177,6 +192,11 @@ schedule:
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for key := range empty {
+		if s, ok := m.servers[key]; ok && !s.manual {
+			delete(m.servers, key)
+		}
+	}
 	for key, s := range additions {
 		if _, exists := m.servers[key]; exists || len(m.servers) < 16 {
 			m.servers[key] = s
