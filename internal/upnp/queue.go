@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/model"
@@ -21,11 +22,14 @@ const maxQueueTracks = 1000
 const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
-	tracks []content.Item
-	caps   model.Capabilities
-	next   int
-	active bool
-	seen   time.Time
+	history []string
+	agent   agentfm.Service
+	ffmpeg  string
+	tracks  []content.Item
+	caps    model.Capabilities
+	next    int
+	active  bool
+	seen    time.Time
 }
 
 // TrackList inspects only direct children, in server order, across menu pages.
@@ -84,6 +88,11 @@ func (m *Manager) StartSequence(ctx context.Context, folder, start string, caps 
 		}
 		tracks = tracks[index:]
 	}
+	return m.createQueue(ctx, tracks, caps, false)
+}
+
+func (m *Manager) createQueue(ctx context.Context, tracks []content.Item, caps model.Capabilities, agent bool) (content.Playback, string, error) {
+	var e error
 	// Reject unsupported/mixed output codecs before starting an HTTP stream.
 	// The existing FLAC fallback advertises MP3, so FLAC-only CDs still work.
 	codec := ""
@@ -94,7 +103,7 @@ func (m *Manager) StartSequence(ctx context.Context, folder, start string, caps 
 		if codec == "" {
 			codec = item.PlaybackCodec
 		}
-		if item.PlaybackCodec != codec {
+		if !agent && item.PlaybackCodec != codec {
 			return content.Playback{}, "", errors.New("mixed output codecs are not supported by Play All")
 		}
 	}
@@ -136,7 +145,12 @@ func (m *Manager) StartSequence(ctx context.Context, folder, start string, caps 
 		}
 		delete(m.queues, oldest)
 	}
-	m.queues[id] = &musicQueue{tracks: tracks, caps: caps, seen: now}
+	q := &musicQueue{tracks: tracks, caps: caps, seen: now}
+	if agent {
+		q.agent, q.ffmpeg = m.agent, m.agentFFmpeg
+		play.Transcode = true
+	}
+	m.queues[id] = q
 	return play, id, nil
 }
 
@@ -250,7 +264,7 @@ func (m *Manager) ServeQueue(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if q.next == len(q.tracks) {
+	if q.agent == nil && q.next == len(q.tracks) {
 		m.mu.Unlock()
 		http.Error(w, "Play All finished; select it again to restart", 410)
 		return
@@ -280,6 +294,10 @@ func (m *Manager) ServeQueue(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "music playback busy", 503)
 			return
 		}
+	}
+	if q.agent != nil {
+		m.serveAgentQueue(w, r, q, index)
+		return
 	}
 	codec := q.tracks[index].PlaybackCodec
 	mime := "audio/mpeg"

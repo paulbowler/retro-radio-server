@@ -33,7 +33,16 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		}
 		var play content.Playback
 		playURL := ""
-		if strings.HasPrefix(playbackID, "all_") {
+		agentStation := playbackID == "agent_fm"
+		if agentStation {
+			agent, ok := h.Music.(content.AgentProvider)
+			if !ok {
+				return nil, 0, errors.New("Agent FM unavailable")
+			}
+			var session string
+			play, session, e = agent.StartAgentFM(ctx, caps)
+			playURL = h.Base + "/stream/upnp-queue/" + session
+		} else if strings.HasPrefix(playbackID, "all_") {
 			var selection musicSelection
 			raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(playbackID, "all_"))
 			sequential, ok := h.Music.(content.SequentialProvider)
@@ -51,6 +60,9 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 			return nil, 0, e
 		}
 		previous.Previous = musicLink(base, play.Item.ParentID)
+		if agentStation {
+			previous.Previous = base + "loginXML.asp?gofile="
+		}
 		previous.PreviousBackup = previous.Previous
 
 		description := []string{}
@@ -64,7 +76,11 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 			logo = h.Base + "/artwork/upnp/" + play.Item.PlaybackID + ".jpg"
 		}
 		// Reuse the established station lookup schema. No new Pure wire item types.
-		item := Item{Type: "Station", ID: stationID, Name: play.Item.Title, URL: playURL, Desc: strings.Join(description, " · "), Logo: text(logo), Format: "Radio", Mime: play.Codec(), Bitrate: play.Bitrate(), Reliability: 5}
+		name := play.Item.Title
+		if agentStation {
+			name = "Agent FM"
+		}
+		item := Item{Type: "Station", ID: stationID, Name: name, URL: playURL, Desc: strings.Join(description, " · "), Logo: text(logo), Format: "Radio", Mime: play.Codec(), Bitrate: play.Bitrate(), Reliability: 5}
 		return []Item{previous, item}, 1, nil
 	}
 	object := []byte("0")

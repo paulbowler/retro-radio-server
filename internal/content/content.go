@@ -65,3 +65,9 @@ type SequentialProvider interface {
 	TrackList(context.Context, string) ([]Item, error)
 	StartSequence(context.Context, string, string, model.Capabilities) (Playback, string, error)
 }
+
+// AgentProvider adds an optional online DJ to the top-level radio menu.
+type AgentProvider interface {
+	AgentFMAvailable() bool
+	StartAgentFM(context.Context, model.Capabilities) (Playback, string, error)
+}

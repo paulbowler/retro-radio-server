@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/delivery"
 	"retroradio.local/server/internal/podcast"
@@ -78,6 +79,15 @@ func main() {
 	music.SetPlaybackObserver(relay.TrackMusic)
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
 	music.UseDiscoveryFile(os.Getenv("RETRO_UPNP_DISCOVERY_FILE"))
+	if os.Getenv("RETRO_AGENT_FM") == "true" {
+		client := agentfm.New(agentfm.Config{Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})
+		if client != nil {
+			music.SetAgentFM(client)
+		}
+		if !music.AgentFMAvailable() {
+			log.Print("Agent FM disabled: configure OPENAI_API_KEY and install FFmpeg")
+		}
+	}
 
 	app := &web.App{Music: music, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
 	mux := http.NewServeMux()

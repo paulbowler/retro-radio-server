@@ -1,0 +1,125 @@
+# Agent FM
+
+`[Agent FM]` appears on the Pure's **top-level Retro Radio menu**, beside Radio,
+Podcasts and Music. It chooses music from the discovered UPnP audio servers;
+you do not have to open an album or choose a playlist first.
+
+The first track starts immediately after the library scan. While it plays,
+the server sends candidate track metadata to OpenAI's Responses API to choose
+the next track and write a short DJ link, then sends that text and delivery
+instructions to the Speech API. The rendered voice is downloaded, normalized
+and saved in a temporary MP3 file. At the end of the current track, the voice
+plays and the chosen track follows on the same HTTP connection. The process
+repeats until you stop or select something else. Completed music and speech
+files are not retained. This first iteration plays links **between** tracks;
+it does not talk over a song or crossfade.
+
+## Enable it on your existing server
+
+In the checkout containing `docker-compose.yml`, update main:
+
+```sh
+git pull --ff-only
+```
+
+Edit **`.env` beside `docker-compose.yml`** (create it from `.env.example` if
+needed; preserve your existing settings):
+
+```dotenv
+RETRO_AGENT_FM=true
+OPENAI_API_KEY=your-openai-api-key
+```
+
+Use an OpenAI Platform API key with billing and access to the text and speech
+models. A ChatGPT login is not an API key. Keep `.env` private; it is ignored by
+Git. Do not put the key in the Dockerfile, source code or browser. Limit local
+access with `chmod 600 .env`.
+
+Rebuild and recreate the application:
+
+```sh
+docker compose up -d --build
+```
+
+Compose passes the values into the application container. Changing `.env` then
+just restarting a container does not update its environment; recreate it with
+`docker compose up -d`. The discovery helper does not receive the API key.
+For a non-Docker installation, supply the same environment variables to the
+Retro Radio service and restart it. FFmpeg must be installed; the Docker image
+already includes it. Agent FM's audio normalization is enabled independently
+of the ordinary FLAC fallback setting.
+
+## Radio test
+
+1. Reopen the Pure's top-level Internet Radio / Retro Radio menu. Select
+   `[Agent FM]` beside Music; it should not appear inside an album.
+2. Allow the initial library scan (up to eight seconds). A music track starts.
+3. At its end, listen for a brief AI-generated spoken link, followed by the
+   announced track. The radio's ICY text changes from the music title to
+   `Agent FM - Up next: …` and then to the new music title, provided the radio
+   requests ICY metadata as it does for Play All.
+4. Let several transitions play, then select another station. Preparation and
+   temporary-file cleanup should stop with the old connection.
+5. Try an invalid API key: Agent FM should still play music, skipping spoken
+   links. `docker compose logs --tail=100 retro-radio` reports HTTP failures
+   without printing credentials, API response bodies or track scripts.
+
+If the option is missing, check `RETRO_AGENT_FM=true` and that `OPENAI_API_KEY`
+is nonempty in `.env`, recreate the container and reopen the radio menu.
+Startup logs say when Agent FM cannot be enabled. At least two compatible
+UPnP tracks must be available to start the station.
+
+## Voice and model settings
+
+These optional `.env` values have defaults:
+
+```dotenv
+RETRO_AGENT_TEXT_MODEL=gpt-4o-mini
+RETRO_AGENT_SPEECH_MODEL=gpt-4o-mini-tts
+RETRO_AGENT_VOICE=cedar
+RETRO_AGENT_DELIVERY="Speak as a warm British music presenter, conversational and relaxed, with natural inflection and varied rhythm."
+```
+
+A blank delivery setting uses built-in British DJ instructions. This is online
+AI speech, not the operating system's speech voice. Both API requests incur
+usage charges, generally one text call and one speech call per track transition
+while Agent FM is playing. No API calls occur for menu browsing or HEAD probes.
+The short link is an AI-generated voice; it is not a recording of a human DJ.
+
+## First-iteration limits and fallback
+
+- Each new session samples up to 1,000 playable tracks, across up to 200 UPnP
+  browse pages, within eight seconds. It traverses discovered servers and
+  folders, deduplicates object playback tokens, and randomizes traversal and
+  candidates. Large libraries can yield a partial pool; this is not a complete
+  persistent library index. Selecting Agent FM again builds a new pool.
+- Each transition offers up to 100 candidates from that pool. The current
+  track is excluded, and the previous 20 tracks are avoided when enough tracks
+  remain. With a small library, older tracks can repeat. The agent receives
+  only title/artist/album metadata; NAS URLs and audio files are never sent.
+- Speech preparation has a 40-second total deadline. If it is not ready at the
+  boundary, it is cancelled and music continues immediately. A valid track
+  choice is kept if speech alone fails; invalid or late choices use a random
+  available candidate. There are no retries or queued late announcements.
+- Music and speech use a consistent 128 kbps, 44.1 kHz stereo MP3 stream. FFmpeg
+  receives pinned NAS bytes or downloaded speech bytes, not untrusted URLs.
+  Temporary speech files are private and deleted after use or cancellation.
+- Selecting another station cancels work when the radio closes the old stream.
+  Reconnecting resumes at the current chosen track from its beginning. An
+  unavailable music source can end the connection; reselect Agent FM to build
+  a fresh pool. Very long sessions may need restarting as NAS tokens expire.
+- No live news, weather, events, lyrics or invented music history are requested
+  in this iteration. The prompts constrain links to supplied track metadata.
+
+The API integration uses [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+and [Text to speech](https://developers.openai.com/api/docs/guides/text-to-speech).
+
+## Validation
+
+Tests cover the two API requests and voice instructions, bounded responses,
+invalid track choices, API failures and cancellation; the Pure top-level menu
+and lookup; one stream containing music → speech → agent-selected music with
+changing ICY text; fallback music; late-job cancellation and file cleanup.
+An FFmpeg integration test generates sources at different sample rates and
+checks that the joined normalized MP3 segments decode together. The CI workflow
+installs FFmpeg and runs these alongside the existing Play All tests.

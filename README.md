@@ -203,3 +203,11 @@ Music and podcast media clients carrying a valid radio ID remain attributable ev
 Music status also retains the known-duration estimate when a radio releases a media connection while playing buffered audio. A client disconnect is not proof that the radio stopped; source failures still clear their own playback record.
 
 Dashboard playing cards show artwork and station, programme or track details. Background checks update the cards only when their visible content changes.
+
+### Agent FM
+
+Enable the optional `[Agent FM]` station on the Pure's top-level menu to let an
+online AI choose music from your UPnP servers and prepare natural spoken links
+between tracks. Set `RETRO_AGENT_FM=true` and `OPENAI_API_KEY` in the server's
+`.env`, then rebuild. See [Agent FM setup and radio testing](docs/agent-fm.md)
+for voice settings, costs, fallback behaviour and the initial library limits.

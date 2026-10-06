@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/netip"
+	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/model"
 	"sort"
@@ -26,6 +27,8 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
+	agent            agentfm.Service
+	agentFFmpeg      string
 	queues           map[string]*musicQueue
 	queueSlots       chan struct{}
 	queueWait        func(context.Context, time.Duration) error // Tests can bypass real-time pacing.

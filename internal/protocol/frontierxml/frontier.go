@@ -128,6 +128,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			items = append(items, dir("Music", base+"navXML.asp?gofile=Music"))
 			count++
 		}
+		if agent, ok := h.Music.(content.AgentProvider); ok && agent.AgentFMAvailable() && d.Capabilities.MP3 {
+			id, e := h.musicStationID("agent_fm")
+			if e != nil {
+				err = e
+				break
+			}
+			items = append(items, Item{Type: "Station", ID: id, Name: "[Agent FM]"})
+			count++
+		}
 	case "navxml", "favxml", "afavxml", "search":
 		if endpoint == "navxml" && q.Get("gofile") == "RadioMenu" {
 			items = append(items, dir("All stations", base+"navXML.asp?gofile=Radio"), dir("By country", base+"navXML.asp?group=country"), dir("By genre", base+"navXML.asp?group=genre"), dir("Favourites", base+"FavXML.asp?empty="), Item{Type: "Search", SearchURL: base + "Search.asp?sSearchtype=1", SearchBackup: base + "Search.asp?sSearchtype=1", Caption: "Search stations", Textbox: text(""), Go: "Search", Cancel: "Cancel"})
