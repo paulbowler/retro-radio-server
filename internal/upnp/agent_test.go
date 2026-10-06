@@ -62,7 +62,7 @@ func TestAgentFMTopLevelMenuAndGlobalLibrary(t *testing.T) {
 	}
 	disabled := get("loginXML.asp?gofile=")
 	for _, item := range disabled.Items {
-		if item.Name == "[Agent FM]" {
+		if item.Name == "Agent FM" {
 			t.Fatal("shown without configuration")
 		}
 	}
@@ -72,7 +72,7 @@ func TestAgentFMTopLevelMenuAndGlobalLibrary(t *testing.T) {
 	})
 	m.agentFFmpeg = fakeAgentFFmpeg(t)
 	root := get("loginXML.asp?gofile=")
-	if root.Count != 4 || len(root.Items) != 5 || root.Items[4].Name != "[Agent FM]" || root.Items[4].Type != "Station" {
+	if root.Count != 4 || len(root.Items) != 5 || root.Items[4].Name != "Agent FM" || root.Items[4].Type != "Station" {
 		t.Fatal(root)
 	}
 	album := get("navXML.asp?music=" + base64.RawURLEncoding.EncodeToString([]byte(folder)))
@@ -80,7 +80,7 @@ func TestAgentFMTopLevelMenuAndGlobalLibrary(t *testing.T) {
 		t.Fatal(album)
 	}
 	for _, i := range album.Items {
-		if i.Name == "[Agent FM]" {
+		if i.Name == "Agent FM" {
 			t.Fatal("Agent FM inside album")
 		}
 	}
@@ -245,7 +245,7 @@ func TestAgentLibraryPaginationCyclesAndMinimumTracks(t *testing.T) {
 		want int
 	}{{103, "tracks", 103}, {3, "folder", 2}, {1, "tracks", 0}} {
 		m, _ := queueFixture(t, tc.n, tc.kind)
-		tracks, e := m.agentLibrary(context.Background())
+		tracks, e := m.agentLibrary(context.Background(), "0")
 		if tc.want == 0 {
 			if e == nil {
 				t.Fatal("started with one track")

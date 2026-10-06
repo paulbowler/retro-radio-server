@@ -23,6 +23,7 @@ type Item struct {
 	ID, ParentID, Title, Source     string
 	Artist, Album, ArtURL, Duration string
 	Kind                            Kind
+	Genre                           bool // A UPnP music-genre container.
 	Resources                       []Resource
 	// PlaybackID is an opaque source-issued token, never a client-supplied URL.
 	PlaybackID    string
@@ -34,6 +35,7 @@ type Page struct {
 	Total, Returned int
 	ParentID, Title string
 	UpdateID        string
+	Genre           bool // This folder represents one genre, not the genre index.
 }
 type Playback struct {
 	Transcode bool // FLAC input converted to the established MP3 output profile.
@@ -70,4 +72,8 @@ type SequentialProvider interface {
 type AgentProvider interface {
 	AgentFMAvailable() bool
 	StartAgentFM(context.Context, model.Capabilities) (Playback, string, error)
+}
+
+type GenreAgentProvider interface {
+	StartGenreFM(context.Context, string, model.Capabilities) (Playback, string, error)
 }

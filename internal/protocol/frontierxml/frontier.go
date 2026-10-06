@@ -134,7 +134,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				err = e
 				break
 			}
-			items = append(items, Item{Type: "Station", ID: id, Name: "[Agent FM]"})
+			items = append(items, Item{Type: "Station", ID: id, Name: "Agent FM"})
 			count++
 		}
 	case "navxml", "favxml", "afavxml", "search":

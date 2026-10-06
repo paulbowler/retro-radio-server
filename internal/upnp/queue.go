@@ -22,6 +22,7 @@ const maxQueueTracks = 1000
 const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
+	name    string
 	history []string
 	agent   agentfm.Service
 	ffmpeg  string
@@ -147,7 +148,7 @@ func (m *Manager) createQueue(ctx context.Context, tracks []content.Item, caps m
 	}
 	q := &musicQueue{tracks: tracks, caps: caps, seen: now}
 	if agent {
-		q.agent, q.ffmpeg = m.agent, m.agentFFmpeg
+		q.agent, q.ffmpeg, q.name = m.agent, m.agentFFmpeg, "Agent FM"
 		play.Transcode = true
 	}
 	m.queues[id] = q

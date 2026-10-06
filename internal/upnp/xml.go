@@ -109,6 +109,7 @@ func parseDIDL(raw string) ([]content.Item, error) {
 		item.ArtURL = strings.TrimSpace(entry.Art)
 		if start.Name.Local == "container" {
 			item.Kind = content.Folder
+			item.Genre = entry.Class == "object.container.genre.musicGenre"
 		} else if !strings.HasPrefix(entry.Class, "object.item.audioItem") { // Keep a slot for non-audio objects so TotalMatches stays exact.
 			item.Resources = nil
 		} else {

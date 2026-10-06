@@ -1,6 +1,6 @@
 # Agent FM
 
-`[Agent FM]` appears on the Pure's **top-level Retro Radio menu**, beside Radio,
+`Agent FM` appears on the Pure's **top-level Retro Radio menu**, beside Radio,
 Podcasts and Music. It chooses music from the discovered UPnP audio servers;
 you do not have to open an album or choose a playlist first.
 
@@ -52,7 +52,7 @@ of the ordinary FLAC fallback setting.
 ## Radio test
 
 1. Reopen the Pure's top-level Internet Radio / Retro Radio menu. Select
-   `[Agent FM]` beside Music; it should not appear inside an album.
+   `Agent FM` beside Music; it should not appear inside an album.
 2. Allow the initial library scan (up to eight seconds). A music track starts.
 3. At its end, listen for a brief AI-generated spoken link, followed by the
    announced track. The radio's ICY text changes from the music title to
@@ -143,5 +143,36 @@ seconds to report playback ready again; this was not a measurement of the
 audible gap. We retain continuous playback rather than reconnecting at each
 track. No radio IP address or control PIN is needed in the server configuration.
 
-After upgrading, select another station and then select `[Agent FM]` again so
+After upgrading, select another station and then select `Agent FM` again so
 the Pure fetches the new fixed image.
+
+## Genre stations
+
+In Music → your NAS server → Genre → Jazz (or another genre), the Pure now
+shows `[Jazz FM]` above the existing folders or tracks. The brackets mark this
+as a playback action. The top-level `Agent FM` name has no brackets and still
+samples across the music servers. `[Play All]` is unchanged.
+
+A genre station traverses only that selected NAS genre view, including its
+albums and item lists. The station and spoken-link metadata use `Jazz FM`,
+`Classical FM`, etc. All stations share the saved voice and fixed Retro Radio
+image, and retain continuous audio. No extra API key or configuration is needed.
+
+The server recognises standard UPnP music-genre containers and MinimServer's
+individual folders under its `Genre`/`Genres` index. Other folder types do not
+receive an FM option. A genre needs at least two compatible tracks; it never
+falls back to other genres when that requirement cannot be met. The existing
+eight-second / 200-page / 1,000-track sampling limits also apply within a genre.
+A track tagged with several genres can belong to more than one genre station.
+
+The DJ prompt asks for the recognisable core song title, omitting bracketed
+technical and release annotations (encoding, catalogue numbers, remaster
+dates, etc.) while retaining parentheses that belong to the actual title.
+For example, `So What [FLAC 24bit 96kHz] (2009 Remaster)` becomes `So What`
+in speech, while `Don’t You (Forget About Me)` keeps its full title. The radio's
+track text continues to use the NAS metadata. This spoken-title cleanup is
+performed by the language model and should be checked with your own examples.
+
+After rebuilding, reopen the Pure's menu, verify the unbracketed top-level
+name, then open a genre and select its bracketed FM station. Listen through
+several transitions to confirm the selected music stays within that genre.

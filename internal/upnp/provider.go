@@ -238,6 +238,16 @@ func (p *Provider) Browse(ctx context.Context, object string, offset, count int)
 		}
 		page.ParentID = metadata.Items[0].ParentID
 		page.Title = metadata.Items[0].Title
+		page.Genre = metadata.Items[0].Genre
+		// MinimServer uses ordinary containers for individual genre values.
+		// Identify them by their parent index, never by a track or album name.
+		if !page.Genre && page.ParentID != "" && page.ParentID != "-1" && page.ParentID != "0" {
+			parent, err := p.browse(ctx, page.ParentID, "BrowseMetadata", 0, 1)
+			if err == nil && len(parent.Items) == 1 && parent.Items[0].ID == page.ParentID && parent.Items[0].Kind == content.Folder {
+				title := strings.TrimSpace(parent.Items[0].Title)
+				page.Genre = strings.EqualFold(title, "Genre") || strings.EqualFold(title, "Genres")
+			}
+		}
 	}
 	return page, nil
 }

@@ -27,18 +27,41 @@ func (m *Manager) SetAgentFM(service agentfm.Service) {
 }
 func (m *Manager) AgentFMAvailable() bool { return m.agent != nil && m.agentFFmpeg != "" }
 func (m *Manager) StartAgentFM(ctx context.Context, caps model.Capabilities) (content.Playback, string, error) {
+	return m.startAgentFM(ctx, "0", "Agent FM", caps)
+}
+
+func (m *Manager) StartGenreFM(ctx context.Context, folder string, caps model.Capabilities) (content.Playback, string, error) {
+	page, err := m.Browse(ctx, folder, 0, 1)
+	if err != nil {
+		return content.Playback{}, "", err
+	}
+	if !page.Genre {
+		return content.Playback{}, "", errors.New("select a genre folder for genre FM")
+	}
+	return m.startAgentFM(ctx, folder, page.Title+" FM", caps)
+}
+
+func (m *Manager) startAgentFM(ctx context.Context, folder, name string, caps model.Capabilities) (content.Playback, string, error) {
 	if !m.AgentFMAvailable() {
 		return content.Playback{}, "", errors.New("Agent FM requires an API key and FFmpeg")
 	}
 	if !caps.MP3 {
 		return content.Playback{}, "", errors.New("Agent FM requires MP3 playback")
 	}
-	tracks, e := m.agentLibrary(ctx)
+	tracks, e := m.agentLibrary(ctx, folder)
 	if e != nil {
 		return content.Playback{}, "", e
 	}
 	rand.Shuffle(len(tracks), func(i, j int) { tracks[i], tracks[j] = tracks[j], tracks[i] })
-	return m.createQueue(ctx, tracks, caps, true)
+	play, session, err := m.createQueue(ctx, tracks, caps, true)
+	if err == nil {
+		m.mu.Lock()
+		if q := m.queues[session]; q != nil {
+			q.name = queueTitle(content.Item{Title: name})
+		}
+		m.mu.Unlock()
+	}
+	return play, session, err
 }
 func agentTrack(t content.Item) agentfm.Track {
 	return agentfm.Track{Title: t.Title, Artist: t.Artist, Album: t.Album}
@@ -193,7 +216,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 	w.Header().Set("Content-Type", "audio/mpeg")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Accept-Ranges", "none")
-	w.Header().Set("icy-name", "Agent FM")
+	w.Header().Set("icy-name", q.name)
 	icy := r.Header.Get("Icy-MetaData") == "1"
 	if icy {
 		w.Header().Set("icy-metaint", "4096")
@@ -266,7 +289,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 		if link.path != "" {
 			speech, e := os.Open(link.path)
 			if e == nil {
-				writer.title = "Agent FM - Up next: " + queueTitle(next)
+				writer.title = q.name + " - Up next: " + queueTitle(next)
 				complete = m.writeAgentAudio(r, w, rc, &writer, speech, nil)
 				speech.Close()
 			}
@@ -326,14 +349,15 @@ func (m *Manager) writeAgentAudio(r *http.Request, w http.ResponseWriter, rc *ht
 }
 
 var _ content.AgentProvider = (*Manager)(nil)
+var _ content.GenreAgentProvider = (*Manager)(nil)
 
 // Build a bounded fresh pool using the existing pinned UPnP browser. Cycles and
 // alternate views of the same object cannot grow the pool or repeat that track.
-func (m *Manager) agentLibrary(parent context.Context) ([]content.Item, error) {
+func (m *Manager) agentLibrary(parent context.Context, root string) ([]content.Item, error) {
 	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 	defer cancel()
-	folders := []string{"0"}
-	seenFolders := map[string]bool{"0": true}
+	folders := []string{root}
+	seenFolders := map[string]bool{root: true}
 	seenTracks := map[string]bool{}
 	var tracks []content.Item
 	pages := 0
@@ -367,7 +391,7 @@ func (m *Manager) agentLibrary(parent context.Context) ([]content.Item, error) {
 		return nil, parent.Err()
 	}
 	if len(tracks) < 2 {
-		return nil, errors.New("Agent FM needs at least two playable tracks on the UPnP music servers")
+		return nil, errors.New("Agent FM needs at least two playable tracks in the selected music view")
 	}
 	log.Printf("Agent FM: sampled %d tracks from the music servers", len(tracks))
 	return tracks, nil

@@ -206,7 +206,10 @@ Dashboard playing cards show artwork and station, programme or track details. Ba
 
 ### Agent FM
 
-Enable the optional `[Agent FM]` station on the Pure's top-level menu to let an
+Genre folders also offer stations such as `[Jazz FM]`, which select music only
+from that genre's NAS view. The top-level `Agent FM` still uses the whole library.
+
+Enable the optional `Agent FM` station on the Pure's top-level menu to let an
 online AI choose music from your UPnP servers and prepare natural spoken links
 between tracks. Set `RETRO_AGENT_FM=true` and `OPENAI_API_KEY` in the server's
 `.env`, then rebuild. See [Agent FM setup and radio testing](docs/agent-fm.md)

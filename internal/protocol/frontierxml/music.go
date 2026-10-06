@@ -33,14 +33,32 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		}
 		var play content.Playback
 		playURL := ""
-		agentStation := playbackID == "agent_fm"
+		genreStation := strings.HasPrefix(playbackID, "genre_fm_")
+		agentStation := playbackID == "agent_fm" || genreStation
+		agentName := "Agent FM"
+		genreFolder := ""
 		if agentStation {
 			agent, ok := h.Music.(content.AgentProvider)
 			if !ok {
 				return nil, 0, errors.New("Agent FM unavailable")
 			}
 			var session string
-			play, session, e = agent.StartAgentFM(ctx, caps)
+			if genreStation {
+				folder, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(playbackID, "genre_fm_"))
+				genre, ok := h.Music.(content.GenreAgentProvider)
+				if err != nil || !ok || len(folder) == 0 || len(folder) > 2048 {
+					return nil, 0, errors.New("invalid genre selection")
+				}
+				page, err := h.Music.Browse(ctx, string(folder), 0, 1)
+				if err != nil || !page.Genre {
+					return nil, 0, errors.New("genre unavailable; reopen the music menu")
+				}
+				agentName = page.Title + " FM"
+				genreFolder = string(folder)
+				play, session, e = genre.StartGenreFM(ctx, string(folder), caps)
+			} else {
+				play, session, e = agent.StartAgentFM(ctx, caps)
+			}
 			playURL = h.Base + "/stream/upnp-queue/" + session
 		} else if strings.HasPrefix(playbackID, "all_") {
 			var selection musicSelection
@@ -63,6 +81,9 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		if agentStation {
 			previous.Previous = base + "loginXML.asp?gofile="
 		}
+		if genreStation {
+			previous.Previous = musicLink(base, genreFolder)
+		}
 		previous.PreviousBackup = previous.Previous
 
 		description := []string{}
@@ -81,7 +102,7 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		// Reuse the established station lookup schema. No new Pure wire item types.
 		name := play.Item.Title
 		if agentStation {
-			name = "Agent FM"
+			name = agentName
 		}
 		item := Item{Type: "Station", ID: stationID, Name: name, URL: playURL, Desc: strings.Join(description, " · "), Logo: text(logo), Format: "Radio", Mime: play.Codec(), Bitrate: play.Bitrate(), Reliability: 5}
 		return []Item{previous, item}, 1, nil
@@ -125,15 +146,32 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 			return nil, 0, e
 		}
 	}
-	offset, count := start-1, end-start+1
-	if len(tracks) > 0 {
-		if offset > 0 {
-			offset--
-		} else {
-			count--
+	actions := []Item{}
+	if agent, ok := h.Music.(content.AgentProvider); ok && agent.AgentFMAvailable() && caps.MP3 {
+		if _, ok := h.Music.(content.GenreAgentProvider); ok {
+			genre, err := h.Music.Browse(ctx, string(object), 0, 1)
+			if err != nil {
+				return nil, 0, err
+			}
+			if genre.Genre {
+				id, err := h.musicStationID("genre_fm_" + base64.RawURLEncoding.EncodeToString(object))
+				if err != nil {
+					return nil, 0, err
+				}
+				actions = append(actions, Item{Type: "Station", ID: id, Name: "[" + genre.Title + " FM]"})
+			}
 		}
 	}
-	// Browse metadata even when the requested page contains only Play All.
+	if len(tracks) > 0 {
+		id, err := h.musicStationID(sequenceSelection(string(object), ""))
+		if err != nil {
+			return nil, 0, err
+		}
+		actions = append(actions, Item{Type: "Station", ID: id, Name: "[Play All]"})
+	}
+	offset := max(0, start-1-len(actions))
+	count := max(0, end-start+1-max(0, len(actions)-(start-1)))
+	// Browse metadata even when the requested page contains only actions.
 	page, e := h.Music.Browse(ctx, string(object), offset, max(1, count))
 	if count == 0 {
 		page.Items = nil
@@ -146,12 +184,10 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		previous.PreviousBackup = previous.Previous
 	}
 	items := []Item{previous}
-	if len(tracks) > 0 && start == 1 {
-		id, err := h.musicStationID(sequenceSelection(string(object), ""))
-		if err != nil {
-			return nil, 0, err
+	for i, action := range actions {
+		if i >= start-1 && i < end {
+			items = append(items, action)
 		}
-		items = append(items, Item{Type: "Station", ID: id, Name: "[Play All]"})
 	}
 	for _, entry := range page.Items {
 		if entry.Kind == content.Folder {
@@ -169,10 +205,7 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 			items = append(items, Item{Type: "Station", ID: id, Name: entry.Title})
 		}
 	}
-	total := page.Total
-	if len(tracks) > 0 {
-		total++
-	}
+	total := page.Total + len(actions)
 	return items, total, nil
 }
 
