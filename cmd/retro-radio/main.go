@@ -76,7 +76,6 @@ func main() {
 	if e != nil {
 		log.Printf("Manual music configuration ignored; automatic discovery enabled: %v", e)
 	}
-	music.ArtworkBase = base
 	music.SetPlaybackObserver(relay.TrackMusic)
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
 	music.UseDiscoveryFile(os.Getenv("RETRO_UPNP_DISCOVERY_FILE"))

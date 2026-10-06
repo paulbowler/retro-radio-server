@@ -132,9 +132,16 @@ installs FFmpeg and runs these alongside the existing Play All tests.
 
 ### Artwork during playback
 
-Continuous music now publishes the current track's local artwork URL in ICY
-`StreamUrl`, alongside `StreamTitle`. During a spoken link it advertises the
-upcoming track's artwork. Missing artwork sends an empty URL. Station lookup
-still supplies the starting image. Players supporting ICY artwork can fetch
-each new image; whether the Pure refreshes it requires a real-radio test.
-Text updating successfully does not establish support for artwork updates.
+Agent FM uses the existing Retro Radio image throughout the session, served as
+a radio-compatible 128 × 128 JPEG at `/artwork/agent-fm.jpg`. Track text still
+changes through ICY metadata within one continuous audio connection.
+
+The Elan IR5 did not refresh artwork from changing ICY `StreamUrl` values.
+That experiment has been removed. Its local FSAPI controls can reselect a
+station and trigger a new directory lookup, but a live test took about 2.5
+seconds to report playback ready again; this was not a measurement of the
+audible gap. We retain continuous playback rather than reconnecting at each
+track. No radio IP address or control PIN is needed in the server configuration.
+
+After upgrading, select another station and then select `[Agent FM]` again so
+the Pure fetches the new fixed image.

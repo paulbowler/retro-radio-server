@@ -27,7 +27,6 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
-	ArtworkBase      string // Public origin, configured at startup for ICY artwork links.
 	agent            agentfm.Service
 	agentFFmpeg      string
 	queues           map[string]*musicQueue

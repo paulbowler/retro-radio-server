@@ -16,6 +16,10 @@ func (a *App) ServeRadioArtwork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
+	if r.URL.Path == "/artwork/agent-fm.jpg" {
+		serveFallbackArtwork(w, r, true)
+		return
+	}
 	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/artwork/"), ".jpg")
 	if id == "" || strings.Contains(id, "/") {
 		http.NotFound(w, r)

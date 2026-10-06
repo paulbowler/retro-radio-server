@@ -396,35 +396,3 @@ func TestGeneratedContinuousMP3AndFLACQueuesDecode(t *testing.T) {
 		})
 	}
 }
-
-func TestQueueICYArtworkChangesClearsAndKeepsAudio(t *testing.T) {
-	var wire bytes.Buffer
-	writer := queueICY{w: &wire, remaining: 4096, enabled: true, title: "First", artwork: "http://radio.test/artwork/upnp/first.jpg"}
-	writer.Write(bytes.Repeat([]byte{'A'}, 4096))
-	writer.title = "Second"
-	writer.artwork = "http://radio.test/artwork/upnp/second.jpg"
-	writer.Write(bytes.Repeat([]byte{'B'}, 4096))
-	writer.title = "No artwork"
-	writer.artwork = ""
-	writer.Write(bytes.Repeat([]byte{'C'}, 4096))
-	audio, meta := splitQueueICY(t, wire.Bytes())
-	if len(audio) != 3*4096 || len(meta) != 3 || !strings.Contains(meta[0], "StreamUrl='http://radio.test/artwork/upnp/first.jpg';") || !strings.Contains(meta[1], "StreamUrl='http://radio.test/artwork/upnp/second.jpg';") || !strings.Contains(meta[2], "StreamUrl='';") {
-		t.Fatal(meta)
-	}
-	m := &Manager{ArtworkBase: "http://radio.test/"}
-	if got := m.queueArtwork(content.Item{PlaybackID: "safe", ArtURL: "http://nas/cover"}); got != "http://radio.test/artwork/upnp/safe.jpg" {
-		t.Fatal(got)
-	}
-	if m.queueArtwork(content.Item{PlaybackID: "safe"}) != "" {
-		t.Fatal("missing artwork not cleared")
-	}
-}
-func TestQueueICYArtworkMetadataBoundedAndEscaped(t *testing.T) {
-	var wire bytes.Buffer
-	writer := queueICY{w: &wire, remaining: 4096, enabled: true, title: strings.Repeat("é", 4000), artwork: "http://radio.test/x';StreamTitle='bad\r\n.jpg"}
-	writer.Write(bytes.Repeat([]byte{'A'}, 4096))
-	_, meta := splitQueueICY(t, wire.Bytes())
-	if len(meta[0]) > 4080 || strings.Contains(meta[0], "StreamTitle='bad") || strings.ContainsAny(meta[0], "\r\n") || !strings.Contains(meta[0], "%27%3B") {
-		t.Fatal("invalid artwork metadata")
-	}
-}

@@ -89,6 +89,9 @@ func TestAgentFMTopLevelMenuAndGlobalLibrary(t *testing.T) {
 	if item.Name != "Agent FM" || item.Mime != "MP3" || item.Bitrate != 128 || !strings.Contains(item.URL, "/stream/upnp-queue/") || !strings.Contains(item.URL, "?radio=") {
 		t.Fatal(item)
 	}
+	if item.Logo == nil || *item.Logo != h.Base+"/artwork/agent-fm.jpg" {
+		t.Fatal("Agent FM did not use the fixed station image", item)
+	}
 	id := strings.Split(strings.Split(item.URL, "/stream/upnp-queue/")[1], "?")[0]
 	if len(m.queues[id].tracks) != 3 {
 		t.Fatal("did not gather global tracks")

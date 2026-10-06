@@ -117,6 +117,34 @@ func TestRadioJPEGRejectsOversizedAndInvalidImages(t *testing.T) {
 	}
 }
 
+func TestAgentFMArtworkUsesRetroRadioImage(t *testing.T) {
+	// Legacy radios fetch this without management credentials or a station row.
+	a := &App{User: "admin", Password: "secret"}
+	want, err := fallbackRadioJPEG()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"GET", "HEAD", "POST"} {
+		w := httptest.NewRecorder()
+		a.ServeRadioArtwork(w, httptest.NewRequest(method, "/artwork/agent-fm.jpg", nil))
+		if method == "POST" {
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Fatal(w.Code)
+			}
+			continue
+		}
+		if w.Code != 200 || w.Header().Get("Content-Type") != "image/jpeg" || w.Header().Get("Content-Length") != strconv.Itoa(len(want)) {
+			t.Fatal(w.Code, w.Header())
+		}
+		if method == "GET" && !bytes.Equal(w.Body.Bytes(), want) {
+			t.Fatal("did not serve the Retro Radio image")
+		}
+		if method == "HEAD" && w.Body.Len() != 0 {
+			t.Fatal("HEAD returned a body")
+		}
+	}
+}
+
 func TestCandidateArtworkAndCardPlaceholder(t *testing.T) {
 	s, err := store.Open(filepath.Join(t.TempDir(), "candidate-artwork.db"))
 	if err != nil {

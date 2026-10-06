@@ -336,7 +336,6 @@ func (m *Manager) ServeQueue(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writer.title = queueTitle(play.Item)
-		writer.artwork = m.queueArtwork(play.Item)
 		if !started {
 			w.Header().Set("icy-name", writer.title)
 			w.WriteHeader(200)
@@ -409,7 +408,6 @@ type queueICY struct {
 	remaining int
 	enabled   bool
 	title     string
-	artwork   string
 }
 
 func (w *queueICY) Write(data []byte) (int, error) {
@@ -430,16 +428,11 @@ func (w *queueICY) Write(data []byte) (int, error) {
 		}
 		data = data[n:]
 		if w.remaining == 0 {
-			art := strings.NewReplacer("'", "%27", ";", "%3B", "\r", "", "\n", "", "\x00", "").Replace(w.artwork)
-			if len(art) > 2048 {
-				art = ""
-			}
-			suffix := "StreamUrl='" + art + "';"
 			title := []rune(w.title)
-			for len([]byte("StreamTitle='"+string(title)+"';"+suffix)) > 4080 {
+			for len([]byte("StreamTitle='"+string(title)+"';")) > 4080 {
 				title = title[:len(title)-1]
 			}
-			text := []byte("StreamTitle='" + string(title) + "';" + suffix)
+			text := []byte("StreamTitle='" + string(title) + "';")
 			units := (len(text) + 15) / 16
 			block := make([]byte, 1+units*16)
 			block[0] = byte(units)
@@ -459,10 +452,3 @@ func (w *queueICY) Write(data []byte) (int, error) {
 
 // Keep wire helpers independent of the stream source or user-supplied URLs.
 var _ content.SequentialProvider = (*Manager)(nil)
-
-func (m *Manager) queueArtwork(item content.Item) string {
-	if m.ArtworkBase == "" || item.ArtURL == "" {
-		return ""
-	}
-	return strings.TrimRight(m.ArtworkBase, "/") + "/artwork/upnp/" + item.PlaybackID + ".jpg"
-}

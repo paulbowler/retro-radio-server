@@ -75,6 +75,9 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		if play.Item.ArtURL != "" {
 			logo = h.Base + "/artwork/upnp/" + play.Item.PlaybackID + ".jpg"
 		}
+		if agentStation {
+			logo = h.Base + "/artwork/agent-fm.jpg"
+		}
 		// Reuse the established station lookup schema. No new Pure wire item types.
 		name := play.Item.Title
 		if agentStation {
