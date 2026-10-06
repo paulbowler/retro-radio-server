@@ -244,7 +244,7 @@ func TestPurePlayAllMenuAndContinuousStreamJourney(t *testing.T) {
 	}
 	link := base + "navXML.asp?music=" + base64.RawURLEncoding.EncodeToString([]byte(folder))
 	first := get(link + "&startItems=1&endItems=24")
-	if first.Count != 32 || len(first.Items) != 25 || first.Items[1].Name != "Play All" || first.Items[24].Name != "Track 23" {
+	if first.Count != 32 || len(first.Items) != 25 || first.Items[1].Name != "[Play All]" || first.Items[24].Name != "Track 23" {
 		t.Fatal(first)
 	}
 	second := get(link + "&startItems=25&endItems=32")

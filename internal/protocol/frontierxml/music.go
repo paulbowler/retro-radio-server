@@ -132,7 +132,7 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		if err != nil {
 			return nil, 0, err
 		}
-		items = append(items, Item{Type: "Station", ID: id, Name: "Play All"})
+		items = append(items, Item{Type: "Station", ID: id, Name: "[Play All]"})
 	}
 	for _, entry := range page.Items {
 		if entry.Kind == content.Folder {
