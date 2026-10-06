@@ -58,3 +58,10 @@ func (p Playback) Bitrate() int {
 	}
 	return p.Resource.Bitrate
 }
+
+// SequentialProvider adds server-controlled playback of one track-only folder.
+// TrackList returns nil for higher-level/mixed folders; it never traverses them.
+type SequentialProvider interface {
+	TrackList(context.Context, string) ([]Item, error)
+	StartSequence(context.Context, string, string, model.Capabilities) (Playback, string, error)
+}

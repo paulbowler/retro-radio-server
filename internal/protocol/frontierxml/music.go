@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net/url"
@@ -30,13 +31,27 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		if e != nil {
 			return nil, 0, e
 		}
-		play, e := h.Music.Resolve(ctx, playbackID, caps)
+		var play content.Playback
+		playURL := ""
+		if strings.HasPrefix(playbackID, "all_") {
+			var selection musicSelection
+			raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(playbackID, "all_"))
+			sequential, ok := h.Music.(content.SequentialProvider)
+			if err != nil || json.Unmarshal(raw, &selection) != nil || !ok {
+				return nil, 0, errors.New("invalid music selection")
+			}
+			var session string
+			play, session, e = sequential.StartSequence(ctx, selection.Folder, selection.Start, caps)
+			playURL = h.Base + "/stream/upnp-queue/" + session
+		} else {
+			play, e = h.Music.Resolve(ctx, playbackID, caps)
+			playURL = h.Base + "/stream/upnp/" + play.Item.PlaybackID
+		}
 		if e != nil {
 			return nil, 0, e
 		}
 		previous.Previous = musicLink(base, play.Item.ParentID)
 		previous.PreviousBackup = previous.Previous
-		playURL := h.Base + "/stream/upnp/" + play.Item.PlaybackID
 
 		description := []string{}
 		for _, detail := range []string{play.Item.Artist, play.Item.Album, play.Item.Duration} {
@@ -83,7 +98,27 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 	if start < 1 || start > 1000001 || end < start || end-start+1 > 100 {
 		return nil, 0, errors.New("invalid music page")
 	}
-	page, e := h.Music.Browse(ctx, string(object), start-1, end-start+1)
+	// Play All is about the listed tracks, not album tags or folder names.
+	var tracks []content.Item
+	if sequential, ok := h.Music.(content.SequentialProvider); ok {
+		tracks, e = sequential.TrackList(ctx, string(object))
+		if e != nil {
+			return nil, 0, e
+		}
+	}
+	offset, count := start-1, end-start+1
+	if len(tracks) > 0 {
+		if offset > 0 {
+			offset--
+		} else {
+			count--
+		}
+	}
+	// Browse metadata even when the requested page contains only Play All.
+	page, e := h.Music.Browse(ctx, string(object), offset, max(1, count))
+	if count == 0 {
+		page.Items = nil
+	}
 	if e != nil {
 		return nil, 0, e
 	}
@@ -92,19 +127,34 @@ func (h *Handler) musicItems(ctx context.Context, base string, q url.Values, cap
 		previous.PreviousBackup = previous.Previous
 	}
 	items := []Item{previous}
+	if len(tracks) > 0 && start == 1 {
+		id, err := h.musicStationID(sequenceSelection(string(object), ""))
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, Item{Type: "Station", ID: id, Name: "Play All"})
+	}
 	for _, entry := range page.Items {
 		if entry.Kind == content.Folder {
 			link := musicLink(base, entry.ID)
 			items = append(items, Item{Type: "Dir", Title: entry.Title, Dir: link, Backup: link})
 		} else {
-			id, e := h.musicStationID(entry.PlaybackID)
+			playback := entry.PlaybackID
+			if len(tracks) > 0 {
+				playback = sequenceSelection(string(object), entry.ID)
+			}
+			id, e := h.musicStationID(playback)
 			if e != nil {
 				return nil, 0, e
 			}
 			items = append(items, Item{Type: "Station", ID: id, Name: entry.Title})
 		}
 	}
-	return items, page.Total, nil
+	total := page.Total
+	if len(tracks) > 0 {
+		total++
+	}
+	return items, total, nil
 }
 
 // Station IDs use the same numeric shape as the established radio catalogue.
@@ -180,4 +230,11 @@ func (h *Handler) musicStationID(playback string) (string, error) {
 			return id, nil
 		}
 	}
+}
+
+type musicSelection struct{ Folder, Start string }
+
+func sequenceSelection(folder, start string) string {
+	b, _ := json.Marshal(musicSelection{Folder: folder, Start: start})
+	return "all_" + base64.RawURLEncoding.EncodeToString(b)
 }

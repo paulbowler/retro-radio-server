@@ -26,6 +26,9 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
+	queues           map[string]*musicQueue
+	queueSlots       chan struct{}
+	queueWait        func(context.Context, time.Duration) error // Tests can bypass real-time pacing.
 	PlaybackObserver func(*http.Request, content.Playback) func(bool)
 	DisableTranscode bool
 	mu               sync.RWMutex
@@ -39,7 +42,7 @@ type Manager struct {
 var _ content.Provider = (*Manager)(nil)
 
 func NewManager(manual string) (*Manager, error) {
-	m := &Manager{servers: map[string]musicServer{}, refresh: make(chan struct{}, 1), discover: Discover, newProvider: New, now: time.Now}
+	m := &Manager{queues: map[string]*musicQueue{}, queueSlots: make(chan struct{}, 4), servers: map[string]musicServer{}, refresh: make(chan struct{}, 1), discover: Discover, newProvider: New, now: time.Now}
 	if manual != "" {
 		p, e := New(manual)
 		if e != nil {

@@ -84,6 +84,7 @@ func main() {
 	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base, Music: music, SupportsHTTPS: os.Getenv("RETRO_RADIO_HTTPS") == "true"})
 	mux.Handle("/stream/", relay)
 	mux.Handle("/stream/upnp/", music)
+	mux.HandleFunc("/stream/upnp-queue/", music.ServeQueue)
 	mux.HandleFunc("/artwork/upnp/", music.ServeArtwork)
 	mux.HandleFunc("/episode/", relay.ServeEpisode)
 	mux.HandleFunc("/artwork/", app.ServeRadioArtwork)
