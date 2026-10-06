@@ -80,7 +80,7 @@ func main() {
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
 	music.UseDiscoveryFile(os.Getenv("RETRO_UPNP_DISCOVERY_FILE"))
 	if os.Getenv("RETRO_AGENT_FM") == "true" {
-		client := agentfm.New(agentfm.Config{Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})
+		client := agentfm.New(agentfm.Config{Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), VoiceSelection: func() string { return s.Settings().AgentVoice }, Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})
 		if client != nil {
 			music.SetAgentFM(client)
 		}
@@ -89,7 +89,7 @@ func main() {
 		}
 	}
 
-	app := &web.App{Music: music, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
+	app := &web.App{AgentVoiceDefault: env("RETRO_AGENT_VOICE", "ballad"), Music: music, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
 	mux := http.NewServeMux()
 	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base, Music: music, SupportsHTTPS: os.Getenv("RETRO_RADIO_HTTPS") == "true"})
 	mux.Handle("/stream/", relay)

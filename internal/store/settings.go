@@ -4,9 +4,11 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"retroradio.local/server/internal/agentfm"
 )
 
 type Settings struct {
+	AgentVoice    string `json:"agent_voice,omitempty"`
 	BufferSeconds int    `json:"buffer_seconds"`
 	AutoReconnect bool   `json:"auto_reconnect"`
 	Quality       string `json:"quality"`
@@ -35,7 +37,7 @@ func (s *Store) Settings() Settings {
 	return settings
 }
 func (s *Store) SaveSettings(settings Settings) error {
-	if settings.BufferSeconds < 0 || settings.BufferSeconds > 10 || (settings.Quality != "auto" && settings.Quality != "low") || (settings.Country != "" && len(settings.Country) != 2) {
+	if (settings.AgentVoice != "" && !agentfm.ValidVoice(settings.AgentVoice)) || settings.BufferSeconds < 0 || settings.BufferSeconds > 10 || (settings.Quality != "auto" && settings.Quality != "low") || (settings.Country != "" && len(settings.Country) != 2) {
 		return errors.New("invalid settings")
 	}
 	raw, err := json.Marshal(settings)

@@ -17,7 +17,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       RETRO_AGENT_TEXT_MODEL: ${RETRO_AGENT_TEXT_MODEL:-gpt-4o-mini}
       RETRO_AGENT_SPEECH_MODEL: ${RETRO_AGENT_SPEECH_MODEL:-gpt-4o-mini-tts}
-      RETRO_AGENT_VOICE: ${RETRO_AGENT_VOICE:-cedar}
+      RETRO_AGENT_VOICE: ${RETRO_AGENT_VOICE:-ballad}
       RETRO_AGENT_DELIVERY: ${RETRO_AGENT_DELIVERY:-}
       RETRO_UPNP_DISCOVERY_FILE: /run/retro-upnp/discovery.json
     volumes:

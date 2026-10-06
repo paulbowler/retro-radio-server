@@ -15,11 +15,11 @@ func TestSettingsPersistenceAndValidation(t *testing.T) {
 	if s.Settings() != DefaultSettings() {
 		t.Fatal(s.Settings())
 	}
-	want := Settings{BufferSeconds: 7, AutoReconnect: true, Quality: "low", Country: "GB"}
+	want := Settings{AgentVoice: "ballad", BufferSeconds: 7, AutoReconnect: true, Quality: "low", Country: "GB"}
 	if err = s.SaveSettings(want); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []Settings{{BufferSeconds: 11, Quality: "auto"}, {BufferSeconds: -1, Quality: "auto"}, {Quality: "bad"}} {
+	for _, bad := range []Settings{{BufferSeconds: 11, Quality: "auto"}, {BufferSeconds: -1, Quality: "auto"}, {Quality: "bad"}, {Quality: "auto", AgentVoice: "invalid"}} {
 		if err = s.SaveSettings(bad); err == nil {
 			t.Fatal("invalid setting accepted")
 		}

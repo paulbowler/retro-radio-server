@@ -49,6 +49,7 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 }).ParseFS(assets, "dashboard.html"))
 
 type App struct {
+	AgentVoiceDefault    string
 	Music                content.Provider
 	ArtworkClient        *http.Client
 	artworkMu            sync.Mutex
@@ -125,7 +126,10 @@ func candidateStationCard(item candidateCard) card {
 	return card{Station: model.Station{Favicon: candidate.Favicon, Variants: station.Variants, Name: candidate.Name, URL: station.URL, Country: country, Codec: station.Codec, Bitrate: station.Bitrate, Tags: candidate.Tags, HLS: candidate.HLS != 0, RBUUID: candidate.UUID, Source: "radio-browser"}, Health: item.Health, Discovery: item.Discovery, AutoCheck: item.AutoCheck, Devices: item.Devices, Selected: item.Selected, Context: "/stations"}
 }
 
+type voiceOption struct{ ID, Name string }
+
 type view struct {
+	AgentVoices                                 []voiceOption
 	MusicItems                                  []musicEntry
 	MusicTitle, MusicParent                     string
 	MusicRootPage                               bool

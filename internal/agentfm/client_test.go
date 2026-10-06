@@ -15,6 +15,7 @@ import (
 
 func TestOnlineChoiceAndSpeech(t *testing.T) {
 	var calls []string
+	selected, expectedVoice := "", "ballad"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.URL.Path)
 		if r.Header.Get("Authorization") != "Bearer test-secret" {
@@ -38,7 +39,7 @@ func TestOnlineChoiceAndSpeech(t *testing.T) {
 			}
 			fmt.Fprint(w, `{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"index\":1,\"chat\":\"Next artist, with Next song.\"}"}]}]}`)
 		case "/audio/speech":
-			if p["voice"] != "cedar" || p["response_format"] != "mp3" || p["input"] != "Next artist, with Next song." || !strings.Contains(p["instructions"].(string), "British") {
+			if p["voice"] != expectedVoice || p["response_format"] != "mp3" || p["input"] != "Next artist, with Next song." || !strings.Contains(p["instructions"].(string), "British") {
 				t.Error(p)
 			}
 			w.Write([]byte("downloaded-MP3"))
@@ -47,11 +48,19 @@ func TestOnlineChoiceAndSpeech(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	c := New(Config{Key: "test-secret"})
+	c := New(Config{Key: "test-secret", VoiceSelection: func() string { return selected }})
 	c.base = server.URL
 	segment, e := c.Prepare(context.Background(), Track{Title: "Previous"}, []Track{{Title: "Other"}, {Title: "Next song", Artist: "Next artist"}})
 	if e != nil || segment.Index != 1 || string(segment.Audio) != "downloaded-MP3" || strings.Join(calls, ",") != "/responses,/audio/speech" {
 		t.Fatal(segment, e, calls)
+	}
+	selected, expectedVoice = "fable", "fable"
+	if _, e = c.Prepare(context.Background(), Track{Title: "Previous"}, []Track{{Title: "Other"}, {Title: "Next song", Artist: "Next artist"}}); e != nil {
+		t.Fatal(e)
+	}
+	selected, expectedVoice = "invalid", "ballad"
+	if _, e = c.Prepare(context.Background(), Track{Title: "Previous"}, []Track{{Title: "Other"}, {Title: "Next song", Artist: "Next artist"}}); e != nil {
+		t.Fatal(e)
 	}
 	if New(Config{}) != nil {
 		t.Fatal("enabled without credentials")

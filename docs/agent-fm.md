@@ -76,9 +76,15 @@ These optional `.env` values have defaults:
 ```dotenv
 RETRO_AGENT_TEXT_MODEL=gpt-4o-mini
 RETRO_AGENT_SPEECH_MODEL=gpt-4o-mini-tts
-RETRO_AGENT_VOICE=cedar
+RETRO_AGENT_VOICE=ballad
 RETRO_AGENT_DELIVERY="Speak as a warm British music presenter, conversational and relaxed, with natural inflection and varied rhythm."
 ```
+
+Choose the voice in the web app's Settings (the cog button), under **Agent FM
+voice**, and save. Ballad is the default. A saved voice overrides
+`RETRO_AGENT_VOICE` and persists across restarts. Changes apply when the next
+spoken link is prepared; a link already prepared keeps its original voice.
+No container restart is needed for changes made in the web app.
 
 A blank delivery setting uses built-in British DJ instructions. This is online
 AI speech, not the operating system's speech voice. Both API requests incur

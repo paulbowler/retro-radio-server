@@ -28,7 +28,10 @@ type Segment struct {
 type Service interface {
 	Prepare(context.Context, Track, []Track) (Segment, error)
 }
-type Config struct{ Key, TextModel, SpeechModel, Voice, Delivery string }
+type Config struct {
+	Key, TextModel, SpeechModel, Voice, Delivery string
+	VoiceSelection                               func() string
+}
 type Client struct {
 	config Config
 	http   *http.Client
@@ -46,7 +49,7 @@ func New(c Config) *Client {
 		c.SpeechModel = "gpt-4o-mini-tts"
 	}
 	if c.Voice == "" {
-		c.Voice = "cedar"
+		c.Voice = "ballad"
 	}
 	if c.Delivery == "" {
 		c.Delivery = "You are a warm British radio music presenter. Speak conversationally to one listener, with relaxed confidence, a slight smile, varied rhythm and natural inflection. Keep the link brisk. Brief pauses between thoughts. No announcer boom or exaggerated enthusiasm."
@@ -143,6 +146,25 @@ func (c *Client) Prepare(ctx context.Context, current Track, candidates []Track)
 	if len([]rune(s.Text)) > 600 || len(strings.Fields(s.Text)) > 65 || s.Text == "" {
 		return s, errors.New("spoken link is empty or too long")
 	}
-	s.Audio, e = c.post(ctx, "/audio/speech", map[string]any{"model": c.config.SpeechModel, "voice": c.config.Voice, "input": s.Text, "instructions": c.config.Delivery, "response_format": "mp3"}, MaxAudio)
+	voice := c.config.Voice
+	if c.config.VoiceSelection != nil {
+		if selected := c.config.VoiceSelection(); ValidVoice(selected) {
+			voice = selected
+		}
+	}
+	s.Audio, e = c.post(ctx, "/audio/speech", map[string]any{"model": c.config.SpeechModel, "voice": voice, "input": s.Text, "instructions": c.config.Delivery, "response_format": "mp3"}, MaxAudio)
 	return s, e
+}
+
+// VoiceNames is shared by settings validation and the voice picker.
+func VoiceNames() []string {
+	return []string{"alloy", "ash", "ballad", "cedar", "coral", "echo", "fable", "marin", "nova", "onyx", "sage", "shimmer", "verse"}
+}
+func ValidVoice(name string) bool {
+	for _, v := range VoiceNames() {
+		if v == name {
+			return true
+		}
+	}
+	return false
 }
