@@ -129,3 +129,12 @@ changing ICY text; fallback music; late-job cancellation and file cleanup.
 An FFmpeg integration test generates sources at different sample rates and
 checks that the joined normalized MP3 segments decode together. The CI workflow
 installs FFmpeg and runs these alongside the existing Play All tests.
+
+### Artwork during playback
+
+Continuous music now publishes the current track's local artwork URL in ICY
+`StreamUrl`, alongside `StreamTitle`. During a spoken link it advertises the
+upcoming track's artwork. Missing artwork sends an empty URL. Station lookup
+still supplies the starting image. Players supporting ICY artwork can fetch
+each new image; whether the Pure refreshes it requires a real-radio test.
+Text updating successfully does not establish support for artwork updates.

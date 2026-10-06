@@ -230,6 +230,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 		candidates := agentCandidates(q, item)
 		job := prepareAgentLink(r.Context(), q, item, candidates)
 		writer.title = queueTitle(play.Item)
+		writer.artwork = m.queueArtwork(play.Item)
 		if !started {
 			w.WriteHeader(200)
 			started = true
@@ -267,6 +268,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 			speech, e := os.Open(link.path)
 			if e == nil {
 				writer.title = "Agent FM - Up next: " + queueTitle(next)
+				writer.artwork = m.queueArtwork(next)
 				complete = m.writeAgentAudio(r, w, rc, &writer, speech, nil)
 				speech.Close()
 			}
