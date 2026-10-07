@@ -4,7 +4,18 @@
 Podcasts and Music. It chooses music from the discovered UPnP audio servers;
 you do not have to open an album or choose a playlist first.
 
-The first track starts immediately after the library scan. While it plays,
+After the library scan, each new Agent FM or genre FM session opens with
+“You're listening to Retro Radio. Welcome to [station name]. Good music,
+thoughtfully chosen. Let's begin.” The bracketed placeholder is replaced with
+Agent FM, Jazz FM or the chosen genre station name; brackets are not spoken.
+The opening uses the saved voice, speech levelling and saved DJ volume, followed
+by the first song in the same continuous stream. It makes one additional speech
+API request (no text-model call). Introduction preparation has an eight-second
+limit; failure starts music instead. Menu browsing and HEAD probes do not
+prepare greetings, and reconnecting to the same queue does not repeat one.
+Selecting a station afresh creates a new queue and a new greeting.
+
+While the first track plays,
 the server sends candidate track metadata and recent programme context to
 OpenAI's Responses API to choose the next track and write a DJ link, then
 sends the script to the Speech API. The downloaded voice is compressed and loudness-levelled, then decoded into a

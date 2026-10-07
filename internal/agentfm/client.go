@@ -228,14 +228,31 @@ func (c *Client) Prepare(ctx context.Context, current Track, candidates []Track)
 	if len([]rune(s.Text)) > maxChars || len(strings.Fields(s.Text)) > maxWords || s.Text == "" {
 		return s, errors.New("spoken link is empty or too long")
 	}
+	s.Audio, e = c.speech(ctx, s.Text)
+	return s, e
+}
+
+// Intro needs only speech synthesis: the station identification is fixed,
+// rather than asking the text model to invent a different greeting each time.
+func (c *Client) Intro(ctx context.Context, station string) (Segment, error) {
+	station = trim(strings.TrimSpace(station))
+	if station == "" {
+		station = "Agent FM"
+	}
+	s := Segment{Text: "You're listening to Retro Radio. Welcome to " + station + ". Good music, thoughtfully chosen. Let's begin."}
+	var err error
+	s.Audio, err = c.speech(ctx, s.Text)
+	return s, err
+}
+
+func (c *Client) speech(ctx context.Context, text string) ([]byte, error) {
 	voice := c.config.Voice
 	if c.config.VoiceSelection != nil {
 		if selected := c.config.VoiceSelection(); ValidVoice(selected) {
 			voice = selected
 		}
 	}
-	s.Audio, e = c.post(ctx, "/audio/speech", map[string]any{"model": c.config.SpeechModel, "voice": voice, "input": s.Text, "instructions": c.config.Delivery, "response_format": "mp3"}, MaxAudio)
-	return s, e
+	return c.post(ctx, "/audio/speech", map[string]any{"model": c.config.SpeechModel, "voice": voice, "input": text, "instructions": c.config.Delivery, "response_format": "mp3"}, MaxAudio)
 }
 
 // VoiceNames is shared by settings validation and the voice picker.

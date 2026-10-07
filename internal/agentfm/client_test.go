@@ -224,3 +224,30 @@ func TestTextModelReasoningBudget(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionIntroUsesSelectedVoiceAndOnlySpeechAPI(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/audio/speech" {
+			t.Error("greeting made a text-model request", r.URL.Path)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+			return
+		}
+		text, _ := payload["input"].(string)
+		if !strings.HasPrefix(text, "You're listening to Retro Radio.") || !strings.Contains(text, "Welcome to Jazz FM.") || payload["voice"] != "nova" || payload["response_format"] != "mp3" {
+			t.Error(payload)
+		}
+		w.Write([]byte("MP3"))
+	}))
+	defer server.Close()
+	c := New(Config{Key: "test", VoiceSelection: func() string { return "nova" }})
+	c.base = server.URL
+	s, err := c.Intro(context.Background(), "Jazz FM")
+	if err != nil || calls != 1 || string(s.Audio) != "MP3" || !strings.HasPrefix(s.Text, "You're listening to Retro Radio.") {
+		t.Fatal(s, err, calls)
+	}
+}

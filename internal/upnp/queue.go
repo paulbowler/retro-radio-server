@@ -24,6 +24,8 @@ const maxQueueTracks = 1000
 const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
+	introAttempted bool
+
 	volume  func() int
 	name    string
 	history []string

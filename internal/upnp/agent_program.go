@@ -2,6 +2,7 @@
 package upnp
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/content"
 )
 
@@ -212,6 +214,45 @@ func (p *agentProgram) transition(q *musicQueue, tail, speech []byte, next conte
 	return nil
 }
 
+// One identification per station queue, not on a reconnect to that same queue.
+// HEAD probes never run the programme. Failed greetings fall back to music.
+func (p *agentProgram) intro(parent context.Context, q *musicQueue, first content.Item) error {
+	if q.introAttempted {
+		return nil
+	}
+	q.introAttempted = true
+	presenter, ok := q.agent.(interface {
+		Intro(context.Context, string) (agentfm.Segment, error)
+	})
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
+	defer cancel()
+	segment, err := presenter.Intro(ctx, q.name)
+	if err == nil && len(segment.Audio) > 0 && len(segment.Audio) <= agentfm.MaxAudio {
+		var audio io.ReadCloser
+		audio, err = convertAgentSpeech(ctx, q.ffmpeg, io.NopCloser(bytes.NewReader(segment.Audio)))
+		if err == nil {
+			var speech []byte
+			speech, err = io.ReadAll(io.LimitReader(audio, maxAgentSpeechPCM+1))
+			audio.Close()
+			if err == nil && len(speech) <= maxAgentSpeechPCM && ctx.Err() == nil && len(trimAgentSpeech(speech)) > 0 {
+				if err = p.transition(q, nil, speech, first); err != nil {
+					return err
+				}
+				q.rememberLink(segment.Text)
+				return nil
+			}
+		}
+	}
+	if parent.Err() != nil {
+		return parent.Err()
+	}
+	log.Print("Agent FM: session introduction unavailable; starting music")
+	return nil
+}
+
 func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p *agentProgram) error {
 	var primed *primedAgentTrack
 	defer func() {
@@ -231,6 +272,10 @@ func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p 
 			play, audio, err = m.openAgentTrack(ctx, q, item)
 		}
 		if err != nil {
+			return err
+		}
+		if err = p.intro(ctx, q, item); err != nil {
+			audio.Close()
 			return err
 		}
 		candidates := agentCandidates(q, item)
