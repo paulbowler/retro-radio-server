@@ -174,11 +174,8 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 		if len(segment.Audio) == 0 || len(segment.Audio) > agentfm.MaxAudio {
 			return
 		}
-		volume := 100
-		if q.volume != nil {
-			volume = q.volume()
-		}
-		audio, e := normalizeAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)), volume)
+		// Cache at the original level; the saved gain is read at playback time.
+		audio, e := normalizeAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)))
 		if e != nil {
 			log.Print("Agent FM: speech conversion failed; continuing music")
 			return
@@ -221,6 +218,100 @@ func (j *agentJob) ready() agentLink {
 	}
 }
 
+func agentSpeech(ctx context.Context, q *musicQueue, path string) (io.ReadCloser, error) {
+	speech, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	volume := 100
+	if q.volume != nil {
+		volume = q.volume()
+	}
+	if volume == 0 || volume == 100 {
+		return speech, nil
+	}
+	return normalizeAgentAudio(ctx, q.ffmpeg, "mp3", speech, volume)
+}
+
+func (m *Manager) openAgentTrack(ctx context.Context, q *musicQueue, item content.Item) (content.Playback, io.ReadCloser, error) {
+	play, source, _, err := m.openQueueTrack(ctx, item.PlaybackID, q.caps)
+	if err != nil {
+		return play, nil, err
+	}
+	format := "mp3"
+	if play.Codec() == "AAC" {
+		format = "aac"
+	}
+	audio, err := normalizeAgentAudio(ctx, q.ffmpeg, format, source)
+	return play, audio, err
+}
+
+type primedAgentTrack struct {
+	id    string
+	play  content.Playback
+	audio io.ReadCloser
+}
+
+type agentTrackJob struct {
+	done   chan struct{}
+	cancel context.CancelFunc
+	track  *primedAgentTrack
+	taken  bool
+}
+
+type cancelAgentAudio struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (a *cancelAgentAudio) Close() error { a.cancel(); return a.ReadCloser.Close() }
+
+// Wait for the choice, then open and prime exactly one future NAS track while
+// the current track plays. Its bounded decoder pipe supplies backpressure.
+func (m *Manager) primeAgentTrack(parent context.Context, q *musicQueue, link *agentJob, candidates []content.Item) *agentTrackJob {
+	ctx, cancel := context.WithCancel(parent)
+	job := &agentTrackJob{done: make(chan struct{}), cancel: cancel}
+	go func() {
+		defer close(job.done)
+		select {
+		case <-link.done:
+		case <-ctx.Done():
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		item := candidates[link.link.index]
+		play, audio, err := m.openAgentTrack(ctx, q, item)
+		if err != nil {
+			return
+		}
+		job.track = &primedAgentTrack{id: item.PlaybackID, play: play, audio: &cancelAgentAudio{ReadCloser: audio, cancel: cancel}}
+	}()
+	return job
+}
+func (j *agentTrackJob) take(id string) *primedAgentTrack {
+	select {
+	case <-j.done:
+		if j.track != nil && j.track.id == id {
+			j.taken = true
+			return j.track
+		}
+	default:
+	}
+	return nil
+}
+func (j *agentTrackJob) close() {
+	if j.taken {
+		return
+	}
+	j.cancel()
+	<-j.done
+	if j.track != nil {
+		j.track.audio.Close()
+	}
+}
+
 func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *musicQueue, index int) {
 	w.Header().Set("Content-Type", "audio/mpeg")
 	w.Header().Set("Cache-Control", "no-store")
@@ -238,29 +329,33 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 	defer rc.SetWriteDeadline(time.Time{})
 	writer := queueICY{w: w, remaining: 4096, enabled: icy}
 	started := false
+	var primed *primedAgentTrack
+	defer func() {
+		if primed != nil {
+			primed.audio.Close()
+		}
+	}()
 	for {
 		item := q.tracks[index]
-		play, source, _, e := m.openQueueTrack(r.Context(), item.PlaybackID, q.caps)
+		var play content.Playback
+		var audio io.ReadCloser
+		var e error
+		if primed != nil {
+			play, audio = primed.play, primed.audio
+			primed = nil
+		} else {
+			play, audio, e = m.openAgentTrack(r.Context(), q, item)
+		}
 		if e != nil {
 			if !started {
 				http.Error(w, "Agent FM track unavailable", 502)
 			}
 			return
 		}
-		format := "mp3"
-		if play.Codec() == "AAC" {
-			format = "aac"
-		}
-		audio, e := normalizeAgentAudio(r.Context(), q.ffmpeg, format, source)
-		if e != nil {
-			if !started {
-				http.Error(w, "Agent FM audio conversion unavailable", 502)
-			}
-			return
-		}
 		// Start online preparation before sending this track, one transition ahead.
 		candidates := agentCandidates(q, item)
 		job := prepareAgentLink(r.Context(), q, item, candidates)
+		nextAudio := m.primeAgentTrack(r.Context(), q, job, candidates)
 		writer.title = queueTitle(play.Item)
 		if !started {
 			w.WriteHeader(200)
@@ -271,6 +366,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 		complete := m.writeAgentAudio(r, w, rc, &writer, audio, &play)
 		audio.Close()
 		if !complete {
+			nextAudio.close()
 			if job != nil {
 				job.close()
 			}
@@ -281,6 +377,8 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 			link = job.ready()
 		}
 		next := candidates[link.index]
+		primed = nextAudio.take(next.PlaybackID)
+		nextAudio.close()
 		m.mu.Lock()
 		q.history = append(q.history, item.PlaybackID)
 		if len(q.history) > 20 {
@@ -296,7 +394,7 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 		q.seen = time.Now()
 		m.mu.Unlock()
 		if link.path != "" {
-			speech, e := os.Open(link.path)
+			speech, e := agentSpeech(r.Context(), q, link.path)
 			if e == nil {
 				writer.title = q.name + " - Up next: " + queueTitle(next)
 				complete = m.writeAgentAudio(r, w, rc, &writer, speech, nil)

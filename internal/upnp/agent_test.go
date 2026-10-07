@@ -343,12 +343,96 @@ func TestGeneratedAgentSpeechVolumeAndUnchangedMusic(t *testing.T) {
 		}
 		return math.Sqrt(sum / float64(len(pcm)/2))
 	}
-	ratio := rms(convert(200)) / rms(normal)
+	path := filepath.Join(t.TempDir(), "cached-speech.mp3")
+	if err := os.WriteFile(path, normal, 0600); err != nil {
+		t.Fatal(err)
+	}
+	volume := 100
+	q := &musicQueue{ffmpeg: ffmpeg, volume: func() int { return volume }}
+	playSpeech := func(level int) []byte {
+		t.Helper()
+		volume = level
+		audio, err := agentSpeech(context.Background(), q, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer audio.Close()
+		data, err := io.ReadAll(audio)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	if !bytes.Equal(playSpeech(100), normal) {
+		t.Fatal("cached speech changed at the default level")
+	}
+	ratio := rms(playSpeech(200)) / rms(normal)
 	if ratio < 1.8 || ratio > 2.2 {
 		t.Fatal("speech boost was not applied", ratio)
 	}
-	ratio = rms(convert(50)) / rms(normal)
+	ratio = rms(playSpeech(50)) / rms(normal)
 	if ratio < .4 || ratio > .6 {
 		t.Fatal("speech attenuation was not applied", ratio)
+	}
+}
+
+func TestAgentPrimesChosenTrackBeforeHandover(t *testing.T) {
+	m, folder := queueFixture(t, 3, "tracks")
+	tracks, err := m.TrackList(context.Background(), folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := m.servers["fixture"].provider
+	original := p.client.Transport
+	var requests []string
+	p.client.Transport = roundTripMusic(func(r *http.Request) (*http.Response, error) {
+		if strings.HasPrefix(r.URL.Path, "/audio/") {
+			requests = append(requests, r.URL.Path)
+		}
+		return original.RoundTrip(r)
+	})
+	q := &musicQueue{ffmpeg: fakeAgentFFmpeg(t), caps: model.LegacyXML}
+	choice := &agentJob{done: make(chan struct{}), link: agentLink{index: 1}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	job := m.primeAgentTrack(ctx, q, choice, tracks[1:])
+	close(choice.done)
+	select {
+	case <-job.done:
+	case <-time.After(3 * time.Second):
+		job.close()
+		t.Fatal("next music did not become ready")
+	}
+	if strings.Join(requests, ",") != "/audio/2" || q.next != 0 {
+		t.Fatal("prefetch fetched wrong tracks or advanced playback", requests, q.next)
+	}
+	primed := job.take(tracks[2].PlaybackID)
+	if primed == nil || primed.play.Item.Title != "Track 3" {
+		t.Fatal("selected track was not primed")
+	}
+	job.close() // Transferred ownership must preserve the ready audio.
+	data, err := io.ReadAll(primed.audio)
+	primed.audio.Close()
+	if err != nil || !bytes.Equal(data, bytes.Repeat([]byte{'C'}, 5000)) {
+		t.Fatal("primed track could not play", len(data), err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("closing prefetched audio cancelled the playing session")
+	}
+}
+
+func TestAgentPrefetchCancelledBeforeChoice(t *testing.T) {
+	m, _ := queueFixture(t, 2, "tracks")
+	choice := &agentJob{done: make(chan struct{})}
+	job := m.primeAgentTrack(context.Background(), &musicQueue{}, choice, nil)
+	done := make(chan struct{})
+	go func() { job.close(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("prefetch waited for a late AI choice during stop")
+	}
+	if job.track != nil {
+		t.Fatal("unselected audio was opened")
 	}
 }

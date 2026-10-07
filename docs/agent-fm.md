@@ -207,8 +207,23 @@ The [official voice options](https://developers.openai.com/api/docs/guides/text-
 are unchanged.
 
 DJ voice volume ranges from 25% to 400%. Existing installations keep 100%. Try
-200% if spoken links are too quiet. This scales only the generated speech during
-its existing MP3 preparation; music is unchanged. A limiter controls peaks when
-volume is changed. Both settings persist across restarts and apply to the next
-link prepared, in browser, Pure and genre sessions. A link already prepared keeps
-its previous settings. There is no album-specific loudness matching.
+200% if spoken links are too quiet. This scales only the cached spoken announcement
+locally before playback; music is unchanged. A limiter controls peaks when
+volume is changed. Both settings persist across restarts, in browser, Pure and genre sessions.
+Voice selection applies to the next link prepared. Voice volume is read when
+the next announcement starts, including announcements already cached. There is no album-specific loudness matching.
+
+## Track transitions
+
+Agent FM retains one HTTP connection throughout music and speech; it does not
+reselect a station at each boundary. While the current song plays, the server
+prepares the DJ link, then opens and primes the chosen next NAS track. The next
+track's bounded decoder pipe provides backpressure rather than caching an
+entire album. Track metadata and playback history advance only at handover.
+Stopping cancels preparation and closes the unused future audio.
+
+This removes NAS lookup and decoder startup from the normal track boundary.
+If preparation is late or prefetch fails, playback uses the existing fallback
+and may still need to open a track. Silence contained in a recording remains
+part of that recording. Speech-volume adjustments process the small cached
+announcement locally at handover; they do not regenerate its voice online.
