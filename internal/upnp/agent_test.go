@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -148,9 +150,10 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 			}
 			r := httptest.NewRequest("GET", "/stream/upnp-queue/"+id+"?radio=test", nil).WithContext(ctx)
 			r.Header.Set("Icy-MetaData", "1")
+			r.Header.Set("Range", "bytes=0-1") // Safari's opening media probe.
 			w := httptest.NewRecorder()
 			m.ServeQueue(w, r)
-			if w.Code != 200 || len(observed) != 3 {
+			if w.Code != 200 || len(observed) != 3 || w.Header().Get("Accept-Ranges") != "none" || w.Header().Get("Content-Range") != "" {
 				t.Fatal(w.Code, observed)
 			}
 			audio, titles := splitQueueICY(t, w.Body.Bytes())
@@ -291,5 +294,61 @@ func TestAgentSpeechFailureKeepsValidatedChoice(t *testing.T) {
 	link := job.ready()
 	if link.index != 1 || link.path != "" {
 		t.Fatal(link)
+	}
+}
+
+func TestGeneratedAgentSpeechVolumeAndUnchangedMusic(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("FFmpeg integration runs in CI and the Docker runtime")
+	}
+	input, err := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "1", "-c:a", "libmp3lame", "-f", "mp3", "pipe:1").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	convert := func(volume ...int) []byte {
+		t.Helper()
+		audio, err := normalizeAgentAudio(context.Background(), ffmpeg, "mp3", io.NopCloser(bytes.NewReader(input)), volume...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer audio.Close()
+		data, err := io.ReadAll(audio)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	music := convert()
+	normal := convert(100)
+	if !bytes.Equal(music, normal) {
+		t.Fatal("default speech volume changed the original music conversion")
+	}
+	rms := func(data []byte) float64 {
+		t.Helper()
+		cmd := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "mp3", "-i", "pipe:0", "-f", "s16le", "-ar", "44100", "-ac", "1", "pipe:1")
+		cmd.Stdin = bytes.NewReader(data)
+		pcm, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(pcm) < 4000 {
+			t.Fatal("missing decoded audio")
+		}
+		pcm = pcm[2000 : len(pcm)-2000]
+		var sum float64
+		for i := 0; i+1 < len(pcm); i += 2 {
+			v := float64(int16(binary.LittleEndian.Uint16(pcm[i : i+2])))
+			sum += v * v
+		}
+		return math.Sqrt(sum / float64(len(pcm)/2))
+	}
+	ratio := rms(convert(200)) / rms(normal)
+	if ratio < 1.8 || ratio > 2.2 {
+		t.Fatal("speech boost was not applied", ratio)
+	}
+	ratio = rms(convert(50)) / rms(normal)
+	if ratio < .4 || ratio > .6 {
+		t.Fatal("speech attenuation was not applied", ratio)
 	}
 }

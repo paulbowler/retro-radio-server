@@ -193,3 +193,22 @@ Playback uses the web app's existing management authentication.
 Browser audio uses the regular player and does not display the stream's ICY
 track text; the card displays the station name. The Pure still receives the
 changing track text as before.
+
+Opening browser range probes such as Safari's `bytes=0-1` receive the complete
+live stream with HTTP 200 and `Accept-Ranges: none`. The stream has no finite
+length; seeking and multiple ranges remain unsupported.
+
+## DJ voice volume and voice styles
+
+In the web app's Settings, the voice picker groups the existing voices as male,
+female or neutral by their perceived sound; these are app labels rather than
+official OpenAI gender categories. Ballad remains available in the male group.
+The [official voice options](https://developers.openai.com/api/docs/guides/text-to-speech#voice-options)
+are unchanged.
+
+DJ voice volume ranges from 25% to 400%. Existing installations keep 100%. Try
+200% if spoken links are too quiet. This scales only the generated speech during
+its existing MP3 preparation; music is unchanged. A limiter controls peaks when
+volume is changed. Both settings persist across restarts and apply to the next
+link prepared, in browser, Pure and genre sessions. A link already prepared keeps
+its previous settings. There is no album-specific loudness matching.

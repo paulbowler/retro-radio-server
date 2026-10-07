@@ -33,24 +33,24 @@ func TestSettingsModalSaveCountryAndNavigation(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code
 	}
-	if post("buffer=7&reconnect=on&quality=low&country=GB&agent_voice=ballad", "") != 204 {
+	if post("buffer=7&reconnect=on&quality=low&country=GB&agent_voice=ballad&agent_volume=250", "") != 204 {
 		t.Fatal("save failed")
 	}
 	saved := s.Settings()
-	if saved.AgentVoice != "ballad" || saved.BufferSeconds != 7 || !saved.AutoReconnect || saved.Quality != "low" || saved.Country != "GB" {
+	if saved.AgentVolume != 250 || saved.AgentVoice != "ballad" || saved.BufferSeconds != 7 || !saved.AutoReconnect || saved.Quality != "low" || saved.Country != "GB" {
 		t.Fatal(saved)
 	}
-	for _, body := range []string{"buffer=0&quality=auto&agent_voice=invalid", "buffer=11&quality=auto", "buffer=-1&quality=auto", "buffer=x&quality=auto", "buffer=0&quality=invalid", "buffer=0&quality=auto&country=ZZ"} {
+	for _, body := range []string{"buffer=0&quality=auto&agent_volume=x", "buffer=0&quality=auto&agent_volume=0", "buffer=0&quality=auto&agent_volume=401", "buffer=0&quality=auto&agent_voice=invalid", "buffer=11&quality=auto", "buffer=-1&quality=auto", "buffer=x&quality=auto", "buffer=0&quality=invalid", "buffer=0&quality=auto&country=ZZ"} {
 		if post(body, "") != 400 || s.Settings() != saved {
 			t.Fatal("bad settings accepted", body)
 		}
 	}
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest("GET", "/preferences", nil))
-	if !strings.Contains(w.Body.String(), `value="ballad" selected`) || !strings.Contains(w.Body.String(), "Agent FM voice") {
+	if !strings.Contains(w.Body.String(), `name="agent_volume" type="range" min="25" max="400" step="25" value="250"`) || !strings.Contains(w.Body.String(), `<optgroup label="Male voices">`) || !strings.Contains(w.Body.String(), `<optgroup label="Female voices">`) || !strings.Contains(w.Body.String(), `value="ballad" selected`) || !strings.Contains(w.Body.String(), "Agent FM voice") {
 		t.Fatal("saved voice not selected")
 	}
-	if post("buffer=0&quality=auto", "") != 204 || s.Settings().AgentVoice != "ballad" {
+	if post("buffer=0&quality=auto", "") != 204 || (s.Settings().AgentVoice != "ballad" || s.Settings().AgentVolume != 250) {
 		t.Fatal("older settings form erased voice")
 	}
 	if post("buffer=0&quality=auto&country=GB", "") != 204 {

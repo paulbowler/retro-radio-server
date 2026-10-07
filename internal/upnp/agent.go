@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"sync"
 	"time"
 
@@ -97,9 +98,13 @@ func (a *agentAudio) Close() error {
 	a.wait()
 	return nil
 }
-func normalizeAgentAudio(parent context.Context, path, format string, source io.ReadCloser) (io.ReadCloser, error) {
+func normalizeAgentAudio(parent context.Context, path, format string, source io.ReadCloser, volume ...int) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(parent)
 	cmd := exec.CommandContext(ctx, path, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "pipe", "-f", format, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-threads", "1", "-map_metadata", "-1", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-id3v2_version", "0", "-write_xing", "0", "-f", "mp3", "-flush_packets", "1", "pipe:1")
+	if len(volume) > 0 && volume[0] >= 25 && volume[0] <= 400 && volume[0] != 100 {
+		filter := "volume=" + strconv.FormatFloat(float64(volume[0])/100, 'f', 2, 64) + ",alimiter=limit=0.95:level=0"
+		cmd.Args = append(cmd.Args[:len(cmd.Args)-1], "-af", filter, "pipe:1")
+	}
 	cmd.Env = []string{}
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = source
@@ -169,7 +174,11 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 		if len(segment.Audio) == 0 || len(segment.Audio) > agentfm.MaxAudio {
 			return
 		}
-		audio, e := normalizeAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)))
+		volume := 100
+		if q.volume != nil {
+			volume = q.volume()
+		}
+		audio, e := normalizeAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)), volume)
 		if e != nil {
 			log.Print("Agent FM: speech conversion failed; continuing music")
 			return

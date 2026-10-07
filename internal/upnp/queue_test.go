@@ -323,6 +323,7 @@ func TestQueueMethodRangeExpiryAndUnknownID(t *testing.T) {
 		status                    int
 	}{
 		{"POST", id, "", 405}, {"GET", "unknown", "", 404}, {"GET", id, "bytes=3-", 416},
+		{"GET", id, "bytes=-2", 416}, {"GET", id, "bytes=0-1,3-4", 416}, {"GET", id, "bytes=0-no", 416},
 	} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(test.method, "/stream/upnp-queue/"+test.path, nil)
@@ -337,6 +338,23 @@ func TestQueueMethodRangeExpiryAndUnknownID(t *testing.T) {
 	m.ServeQueue(w, httptest.NewRequest("GET", "/stream/upnp-queue/"+id, nil))
 	if w.Code != 404 {
 		t.Fatal(w.Code)
+	}
+}
+
+func TestQueueBrowserOpeningRangeReceivesFullLiveAudio(t *testing.T) {
+	m, folder := queueFixture(t, 1, "tracks")
+	for _, opening := range []string{"bytes=0-", "bytes=0-0", "bytes=0-1", "bytes=0-1023"} {
+		_, id, err := m.StartSequence(context.Background(), folder, "", model.LegacyXML)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest("GET", "/stream/upnp-queue/"+id, nil)
+		r.Header.Set("Range", opening)
+		w := httptest.NewRecorder()
+		m.ServeQueue(w, r)
+		if w.Code != 200 || w.Header().Get("Accept-Ranges") != "none" || w.Header().Get("Content-Range") != "" || w.Header().Get("Content-Length") != "" || !bytes.Equal(w.Body.Bytes(), bytes.Repeat([]byte{'A'}, 5000)) {
+			t.Fatal("opening probe was rejected or truncated the live stream", opening, w.Code, w.Header(), w.Body.Len())
+		}
 	}
 }
 

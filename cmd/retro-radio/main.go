@@ -78,6 +78,7 @@ func main() {
 	}
 	music.SetPlaybackObserver(relay.TrackMusic)
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
+	music.AgentVolume = func() int { return s.Settings().AgentVolume }
 	music.UseDiscoveryFile(os.Getenv("RETRO_UPNP_DISCOVERY_FILE"))
 	if os.Getenv("RETRO_AGENT_FM") == "true" {
 		client := agentfm.New(agentfm.Config{Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), VoiceSelection: func() string { return s.Settings().AgentVoice }, Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})

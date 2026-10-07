@@ -178,7 +178,7 @@ document.addEventListener("error", event => { if (event.target.matches?.("img[da
   if(event.target.closest("[data-open-preferences]")){dialog.showModal();content.textContent="";htmx.ajax("GET","/preferences",{target:content,swap:"innerHTML"});}
   if(event.target.closest("[data-close-preferences]"))dialog.close();
  });
- document.addEventListener("input",event=>{if(event.target.id==="playback-buffer")document.getElementById("buffer-value").textContent=event.target.value+"s";});
+ document.addEventListener("input",event=>{if(event.target.id==="agent-volume")document.getElementById("agent-volume-value").textContent=event.target.value+"%";if(event.target.id==="playback-buffer")document.getElementById("buffer-value").textContent=event.target.value+"s";});
  document.addEventListener("htmx:afterRequest",event=>{
   if(event.detail.elt.id!=="preferences-form")return;
   if(event.detail.successful){dialog.close();return;}

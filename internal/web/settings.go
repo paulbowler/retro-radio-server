@@ -17,11 +17,21 @@ func (a *App) preferences(w http.ResponseWriter, r *http.Request) {
 			settings.AgentVoice = "ballad"
 		}
 	}
-	var voices []voiceOption
-	for _, id := range agentfm.VoiceNames() {
-		voices = append(voices, voiceOption{ID: id, Name: strings.ToUpper(id[:1]) + id[1:]})
+	if settings.AgentVolume == 0 {
+		settings.AgentVolume = 100
 	}
-	render(w, "preferences-form", view{Settings: settings, Countries: countryOptions, AgentVoices: voices})
+	groups := []voiceGroup{{Name: "Male voices"}, {Name: "Female voices"}, {Name: "Neutral voice"}}
+	for _, id := range agentfm.VoiceNames() {
+		group := 0
+		switch id {
+		case "coral", "marin", "nova", "sage", "shimmer":
+			group = 1
+		case "alloy":
+			group = 2
+		}
+		groups[group].Voices = append(groups[group].Voices, voiceOption{ID: id, Name: strings.ToUpper(id[:1]) + id[1:]})
+	}
+	render(w, "preferences-form", view{Settings: settings, Countries: countryOptions, AgentVoiceGroups: groups})
 }
 func (a *App) savePreferences(w http.ResponseWriter, r *http.Request) {
 	if !a.form(w, r) {
@@ -30,6 +40,15 @@ func (a *App) savePreferences(w http.ResponseWriter, r *http.Request) {
 	seconds, err := strconv.Atoi(r.Form.Get("buffer"))
 	country := strings.ToUpper(r.Form.Get("country"))
 	voice := a.Store.Settings().AgentVoice
+	volume := a.Store.Settings().AgentVolume
+	if r.Form.Has("agent_volume") {
+		var volumeErr error
+		volume, volumeErr = strconv.Atoi(r.Form.Get("agent_volume"))
+		if volumeErr != nil || volume < 25 || volume > 400 {
+			http.Error(w, "Choose a DJ voice volume between 25% and 400%.", 400)
+			return
+		}
+	}
 	if r.Form.Has("agent_voice") {
 		voice = r.Form.Get("agent_voice")
 		if !agentfm.ValidVoice(voice) {
@@ -37,7 +56,7 @@ func (a *App) savePreferences(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	settings := store.Settings{AgentVoice: voice, BufferSeconds: seconds, AutoReconnect: r.Form.Get("reconnect") == "on", Quality: r.Form.Get("quality"), Country: country}
+	settings := store.Settings{AgentVoice: voice, AgentVolume: volume, BufferSeconds: seconds, AutoReconnect: r.Form.Get("reconnect") == "on", Quality: r.Form.Get("quality"), Country: country}
 	if err != nil || seconds < 0 || seconds > 10 || (settings.Quality != "auto" && settings.Quality != "low") || (country != "" && !validCountry(country)) {
 		http.Error(w, "Choose a buffer between 0 and 10 seconds and a listed country.", 400)
 		return

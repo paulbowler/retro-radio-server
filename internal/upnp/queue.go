@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ const maxQueueTracks = 1000
 const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
+	volume  func() int
 	name    string
 	history []string
 	agent   agentfm.Service
@@ -148,6 +150,7 @@ func (m *Manager) createQueue(ctx context.Context, tracks []content.Item, caps m
 	}
 	q := &musicQueue{tracks: tracks, caps: caps, seen: now}
 	if agent {
+		q.volume = m.AgentVolume
 		q.agent, q.ffmpeg, q.name = m.agent, m.agentFFmpeg, "Agent FM"
 		play.Transcode = true
 	}
@@ -275,7 +278,7 @@ func (m *Manager) ServeQueue(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "music session is already playing", 409)
 		return
 	}
-	if raw := r.Header.Get("Range"); raw != "" && raw != "bytes=0-" {
+	if !queueOpeningRange(r.Header.Get("Range")) {
 		m.mu.Unlock()
 		http.Error(w, "seeking is unavailable during Play All", 416)
 		return
@@ -391,6 +394,20 @@ func (m *Manager) ServeQueue(w http.ResponseWriter, r *http.Request) {
 		q.seen = time.Now()
 		m.mu.Unlock()
 	}
+}
+
+// Safari may probe a live audio source with bytes=0-1. Ignore an opening range
+// and return the full 200 live stream; no finite length or seeking is offered.
+func queueOpeningRange(raw string) bool {
+	if raw == "" || raw == "bytes=0-" {
+		return true
+	}
+	end, ok := strings.CutPrefix(raw, "bytes=0-")
+	if !ok || end == "" {
+		return false
+	}
+	_, err := strconv.ParseUint(end, 10, 64)
+	return err == nil
 }
 
 func queueTitle(item content.Item) string {

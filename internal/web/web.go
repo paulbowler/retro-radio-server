@@ -127,9 +127,13 @@ func candidateStationCard(item candidateCard) card {
 }
 
 type voiceOption struct{ ID, Name string }
+type voiceGroup struct {
+	Name   string
+	Voices []voiceOption
+}
 
 type view struct {
-	AgentVoices                                 []voiceOption
+	AgentVoiceGroups                            []voiceGroup
 	MusicItems                                  []musicEntry
 	AgentStation                                *agentStationCard
 	MusicTitle, MusicParent                     string
