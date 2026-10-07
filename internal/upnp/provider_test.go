@@ -373,3 +373,33 @@ func TestMusicFinalBytesBeforeCancellationCountAsCompleted(t *testing.T) {
 type roundTripMusic func(*http.Request) (*http.Response, error)
 
 func (f roundTripMusic) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestDIDLPerformerCredits(t *testing.T) {
+	for _, tc := range []struct{ name, tags, artist, composer string }{
+		{"performer after composer", `<artist role="Composer">Jim Steinman</artist><artist role="Performer">Bonnie Tyler</artist>`, "Bonnie Tyler", "Jim Steinman"},
+		{"composer after performer", `<artist role="Performer">Bonnie Tyler</artist><artist role="Composer">Jim Steinman</artist>`, "Bonnie Tyler", "Jim Steinman"},
+		{"unqualified performer", `<artist>Bonnie Tyler</artist><artist role="Songwriter">Jim Steinman</artist>`, "Bonnie Tyler", "Jim Steinman"},
+		{"explicit performer wins", `<artist role="AlbumArtist">Various Artists</artist><artist>Jim Steinman</artist><artist role="Performer">Bonnie Tyler</artist>`, "Bonnie Tyler", ""},
+		{"multiple performers", `<artist role="Performer">Singer A</artist><artist role="Performer">Singer B</artist><artist role="Performer">Singer A</artist>`, "Singer A, Singer B", ""},
+		{"cover retained", `<artist role="Composer">Jim Steinman</artist><artist role="Performer">Cover Band</artist>`, "Cover Band", "Jim Steinman"},
+		{"composer only", `<creator>Jim Steinman</creator><artist role="Composer">Jim Steinman</artist>`, "", "Jim Steinman"},
+		{"track artist over compilation", `<artist role="AlbumArtist">Various Artists</artist><artist>Bonnie Tyler</artist>`, "Bonnie Tyler", ""},
+		{"author composer", `<author role="Composer">Jim Steinman</author><artist>Bonnie Tyler</artist>`, "Bonnie Tyler", "Jim Steinman"},
+		{"legacy creator", `<creator>Legacy Artist</creator>`, "Legacy Artist", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := didlOpen + `<item id="song"><title>Total Eclipse of the Heart</title><class>object.item.audioItem.musicTrack</class>` + tc.tags + `<genre>Pop</genre><genre>Rock</genre><date>1983-01-01</date></item></DIDL-Lite>`
+			items, err := parseDIDL(raw)
+			if err != nil || len(items) != 1 {
+				t.Fatal(items, err)
+			}
+			item := items[0]
+			if item.Artist != tc.artist || item.Composer != tc.composer || item.GenreName != "Pop, Rock" || item.Date != "1983-01-01" {
+				t.Fatal(item)
+			}
+			if tc.artist != "" && !strings.HasPrefix(queueTitle(item), tc.artist+" - ") {
+				t.Fatal("display did not use performer", queueTitle(item))
+			}
+		})
+	}
+}

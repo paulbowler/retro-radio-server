@@ -102,7 +102,8 @@ The short link is an AI-generated voice; it is not a recording of a human DJ.
 - Each transition offers up to 100 candidates from that pool. The current
   track is excluded, and the previous 20 tracks are avoided when enough tracks
   remain. With a small library, older tracks can repeat. The agent receives
-  only title/artist/album metadata; NAS URLs and audio files are never sent.
+  title, performer, album and available composer/genre/date/duration tags, plus
+  up to five recently played tracks; NAS URLs and audio files are never sent.
 - Speech preparation has a 40-second total deadline. If it is not ready at the
   boundary, it is cancelled and music continues immediately. A valid track
   choice is kept if speech alone fails; invalid or late choices use a random
@@ -115,7 +116,9 @@ The short link is an AI-generated voice; it is not a recording of a human DJ.
   unavailable music source can end the connection; reselect Agent FM to build
   a fresh pool. Very long sessions may need restarting as NAS tokens expire.
 - No live news, weather, events, lyrics or invented music history are requested
-  in this iteration. The prompts constrain links to supplied track metadata.
+  in this iteration. Links prefer supplied metadata and may add well-established
+  musical background from model knowledge when confident; there is no live fact
+  lookup, so this is not independently verified research.
 
 The API integration uses [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 and [Text to speech](https://developers.openai.com/api/docs/guides/text-to-speech).
@@ -227,3 +230,30 @@ If preparation is late or prefetch fails, playback uses the existing fallback
 and may still need to open a track. Silence contained in a recording remains
 part of that recording. Speech-volume adjustments process the small cached
 announcement locally at handover; they do not regenerate its voice online.
+
+## Curated selection and track introductions
+
+Agent FM and genre FM choose from shuffled candidates, rather than playing
+an album in order. The DJ considers musical continuity, contrast, duration and
+recent listening history, while avoiding consecutive performers/albums where
+possible. Random selection remains the fallback when the online choice fails.
+The opening track is random. Selection uses tags and model knowledge, not audio
+analysis or measured tempo/energy.
+
+Links introduce the recording's performer and core title, with a short specific
+detail where known, rather than generic groove/vibes filler. DIDL artist roles
+are preserved: performer/artist first, then unqualified track artist, then album artist;
+composer/songwriter credits from artist or author tags are separate. This also corrects radio display names
+when the NAS supplies both roles. Multiple performers at the preferred level
+are retained. An ambiguous creator tag remains a fallback for legacy catalogues.
+
+Incorrect, unqualified artist tags cannot reliably identify a recording: the DJ
+is asked to avoid uncertain credits and never replace a cover performer with
+its famous original artist. Correct the NAS tags if the wrong name persists.
+Exact reissue dates are not treated as original release dates. Uncertain song
+history is omitted. These editorial instructions guide AI output; their factual
+accuracy and musical taste still need listening checks on the actual library.
+
+MinimServer documents these role-bearing tags in its
+[displayRole settings](https://minimserver.com/ug-other.html); composer credits
+can appear as `upnp:artist role="Composer"` or `upnp:author role="Composer"`.

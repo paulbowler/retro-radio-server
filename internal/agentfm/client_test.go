@@ -139,3 +139,46 @@ func TestPreparationCancellation(t *testing.T) {
 		t.Fatal("online call did not cancel")
 	}
 }
+
+func TestEditorialContextSentToOnlineDJ(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/audio/speech" {
+			w.Write([]byte("MP3"))
+			return
+		}
+		var request struct {
+			Input string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		var input struct {
+			Current    Track   `json:"just_played"`
+			Candidates []Track `json:"candidates"`
+		}
+		if err := json.Unmarshal([]byte(request.Input), &input); err != nil {
+			t.Error(err)
+			return
+		}
+		if len(input.Current.Recent) != 5 || input.Current.Recent[0].Title != "b" || len(input.Current.Recent[0].Recent) != 0 {
+			t.Error(input.Current)
+		}
+		track := input.Candidates[1]
+		if track.Artist != "Bonnie Tyler" || track.Composer != "Jim Steinman" || track.Genre != "Pop" || track.Date != "1983" || track.Duration != "0:06:57" {
+			t.Error(track)
+		}
+		fmt.Fprint(w, `{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"index\":1,\"chat\":\"Bonnie Tyler with Total Eclipse of the Heart.\"}"}]}]}`)
+	}))
+	defer server.Close()
+	c := New(Config{Key: "test-secret"})
+	c.base = server.URL
+	current := Track{Title: "Previous"}
+	for _, title := range []string{"a", "b", "c", "d", "e", "f"} {
+		current.Recent = append(current.Recent, Track{Title: title, Recent: []Track{{Title: "nested"}}})
+	}
+	segment, err := c.Prepare(context.Background(), current, []Track{{Title: "Other"}, {Title: "Total Eclipse of the Heart", Artist: "Bonnie Tyler", Composer: "Jim Steinman", Genre: "Pop", Date: "1983", Duration: "0:06:57"}})
+	if err != nil || segment.Index != 1 || !strings.Contains(segment.Text, "Bonnie Tyler") {
+		t.Fatal(segment, err)
+	}
+}

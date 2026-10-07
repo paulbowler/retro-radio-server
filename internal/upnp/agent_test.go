@@ -436,3 +436,32 @@ func TestAgentPrefetchCancelledBeforeChoice(t *testing.T) {
 		t.Fatal("unselected audio was opened")
 	}
 }
+
+func TestAgentSuppliesEditorialMetadataAndRecentHistory(t *testing.T) {
+	tracks := make([]content.Item, 8)
+	var history []string
+	for i := range tracks {
+		id := string(rune('a' + i))
+		tracks[i] = content.Item{PlaybackID: id, Title: id, Artist: "Performer", Album: "Album", Composer: "Writer", GenreName: "Rock", Date: "1983", Duration: "0:04:30"}
+		if i < 7 {
+			history = append(history, id)
+		}
+	}
+	var received agentfm.Track
+	var offered []agentfm.Track
+	q := &musicQueue{tracks: tracks, history: history, agent: agentServiceFunc(func(_ context.Context, current agentfm.Track, candidates []agentfm.Track) (agentfm.Segment, error) {
+		received, offered = current, candidates
+		return agentfm.Segment{}, errors.New("no speech needed")
+	})}
+	job := prepareAgentLink(context.Background(), q, tracks[7], tracks[:2])
+	defer job.close()
+	<-job.done
+	if len(received.Recent) != 5 || received.Recent[0].Title != "c" || received.Recent[4].Title != "g" {
+		t.Fatal(received)
+	}
+	for _, track := range append(offered, received) {
+		if track.Artist != "Performer" || track.Composer != "Writer" || track.Genre != "Rock" || track.Date != "1983" || track.Duration != "0:04:30" {
+			t.Fatal(track)
+		}
+	}
+}

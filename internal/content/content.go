@@ -22,6 +22,7 @@ type Resource struct {
 type Item struct {
 	ID, ParentID, Title, Source     string
 	Artist, Album, ArtURL, Duration string
+	Composer, GenreName, Date       string
 	Kind                            Kind
 	Genre                           bool // A UPnP music-genre container.
 	Resources                       []Resource

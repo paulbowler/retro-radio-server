@@ -65,7 +65,7 @@ func (m *Manager) startAgentFM(ctx context.Context, folder, name string, caps mo
 	return play, session, err
 }
 func agentTrack(t content.Item) agentfm.Track {
-	return agentfm.Track{Title: t.Title, Artist: t.Artist, Album: t.Album}
+	return agentfm.Track{Title: t.Title, Artist: t.Artist, Album: t.Album, Composer: t.Composer, Genre: t.GenreName, Date: t.Date, Duration: t.Duration}
 }
 
 // Every Agent FM source is normalized to the same 128k/44.1k stereo MP3
@@ -154,6 +154,7 @@ type agentJob struct {
 func prepareAgentLink(parent context.Context, q *musicQueue, current content.Item, remaining []content.Item) *agentJob {
 	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	job := &agentJob{done: make(chan struct{}), cancel: cancel}
+	history := append([]string(nil), q.history[max(0, len(q.history)-5):]...)
 	go func() {
 		defer close(job.done)
 		defer cancel()
@@ -161,7 +162,17 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 		for i, t := range remaining {
 			candidates[i] = agentTrack(t)
 		}
-		segment, e := q.agent.Prepare(ctx, agentTrack(current), candidates)
+		present := agentTrack(current)
+		// Snapshot the short listening history before the main loop advances it.
+		for _, id := range history {
+			for _, track := range q.tracks {
+				if track.PlaybackID == id {
+					present.Recent = append(present.Recent, agentTrack(track))
+					break
+				}
+			}
+		}
+		segment, e := q.agent.Prepare(ctx, present, candidates)
 		if segment.Index >= 0 && segment.Index < len(remaining) {
 			job.link.index = segment.Index
 		}

@@ -37,21 +37,91 @@ func directory(d device) (service, bool) {
 	return service{}, false
 }
 
+type didlCredit struct {
+	Name string `xml:",chardata"`
+	Role string `xml:"role,attr"`
+}
+
 type didlEntry struct {
-	ID        string `xml:"id,attr"`
-	Parent    string `xml:"parentID,attr"`
-	Title     string `xml:"title"`
-	Class     string `xml:"class"`
-	Artist    string `xml:"artist"`
-	Creator   string `xml:"creator"`
-	Album     string `xml:"album"`
-	Art       string `xml:"albumArtURI"`
+	ID        string       `xml:"id,attr"`
+	Parent    string       `xml:"parentID,attr"`
+	Title     string       `xml:"title"`
+	Class     string       `xml:"class"`
+	Artists   []didlCredit `xml:"artist"`
+	Authors   []didlCredit `xml:"author"`
+	Composer  string       `xml:"composer"`
+	Genres    []string     `xml:"genre"`
+	Date      string       `xml:"date"`
+	Creator   string       `xml:"creator"`
+	Album     string       `xml:"album"`
+	Art       string       `xml:"albumArtURI"`
 	Resources []struct {
 		URL      string `xml:",chardata"`
 		Protocol string `xml:"protocolInfo,attr"`
 		Bitrate  string `xml:"bitrate,attr"`
 		Duration string `xml:"duration,attr"`
 	} `xml:"res"`
+}
+
+// DIDL can contain several artist elements with different roles. Prefer the
+// recording's performer and keep writing credits separate from its display name.
+func (e didlEntry) credits() (string, string) {
+	best := 0
+	var performers, composers []string
+	add := func(list []string, name string) []string {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return list
+		}
+		for _, old := range list {
+			if strings.EqualFold(old, name) {
+				return list
+			}
+		}
+		return append(list, name)
+	}
+	composers = add(composers, e.Composer)
+	for _, author := range e.Authors {
+		switch strings.ToLower(strings.TrimSpace(author.Role)) {
+		case "composer", "writer", "songwriter", "lyricist":
+			composers = add(composers, author.Name)
+		}
+	}
+	for _, artist := range e.Artists {
+		role := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(artist.Role), " ", ""))
+		rank := 0
+		switch role {
+		case "composer", "writer", "songwriter", "lyricist":
+			composers = add(composers, artist.Name)
+			continue
+		case "performer", "artist", "leadartist":
+			rank = 5
+		case "albumartist":
+			rank = 3
+		case "":
+			rank = 4
+		case "orchestra", "ensemble", "band":
+			rank = 2
+		default:
+			rank = 1
+		}
+		if strings.TrimSpace(artist.Name) == "" {
+			continue
+		}
+		if rank > best {
+			best = rank
+			performers = nil
+		}
+		if rank == best {
+			performers = add(performers, artist.Name)
+		}
+	}
+	// dc:creator is ambiguous and often the composer. Only retain the legacy
+	// fallback when no role-bearing artist or composer credits were supplied.
+	if len(performers) == 0 && len(e.Artists) == 0 && len(composers) == 0 {
+		performers = add(performers, e.Creator)
+	}
+	return strings.Join(performers, ", "), strings.Join(composers, ", ")
 }
 
 func parseDIDL(raw string) ([]content.Item, error) {
@@ -101,10 +171,9 @@ func parseDIDL(raw string) ([]content.Item, error) {
 			return nil, errors.New("invalid UPnP entry")
 		}
 		item := content.Item{ID: entry.ID, ParentID: entry.Parent, Title: entry.Title, Source: "upnp", Kind: content.PlayableItem}
-		item.Artist = entry.Artist
-		if item.Artist == "" {
-			item.Artist = entry.Creator
-		}
+		item.Artist, item.Composer = entry.credits()
+		item.GenreName = strings.Join(entry.Genres, ", ")
+		item.Date = strings.TrimSpace(entry.Date)
 		item.Album = entry.Album
 		item.ArtURL = strings.TrimSpace(entry.Art)
 		if start.Name.Local == "container" {
