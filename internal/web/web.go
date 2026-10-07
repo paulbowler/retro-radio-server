@@ -131,6 +131,7 @@ type voiceOption struct{ ID, Name string }
 type view struct {
 	AgentVoices                                 []voiceOption
 	MusicItems                                  []musicEntry
+	AgentStation                                *agentStationCard
 	MusicTitle, MusicParent                     string
 	MusicRootPage                               bool
 	MusicConnected                              bool
@@ -212,6 +213,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /stations/results", a.search)
 	mux.HandleFunc("GET /stations/card", a.refreshCard)
 	mux.HandleFunc("GET /stations/listen", a.listenCandidate)
+	mux.HandleFunc("GET /music/agent", a.listenAgent)
 	mux.HandleFunc("GET /activity/live", a.activity)
 	mux.HandleFunc("GET /dashboard/live", a.dashboardLive)
 	mux.HandleFunc("GET /stations/{station}/artwork", a.stationArtwork)

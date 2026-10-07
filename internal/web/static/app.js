@@ -255,3 +255,48 @@ document.addEventListener("htmx:afterSwap", event => {
  const version = event.detail.xhr?.getResponseHeader("X-Dashboard-Version");
  if (version) dashboard.dataset.dashboardVersion = version;
 });
+
+// Agent streams start only on Listen. Pausing or leaving the page closes the
+// connection, cancelling the server's next DJ link instead of buffering forever.
+function stopAgentPlayer(player) {
+ if (!player?.hasAttribute("src")) return;
+ player.removeAttribute("src");
+ player.load();
+ player.hidden = true;
+ const card = player.closest(".card");
+ card.querySelector("[data-agent-start]").hidden = false;
+}
+document.addEventListener("click", event => {
+ const button = event.target.closest("[data-agent-start]");
+ if (!button) return;
+ const player = document.getElementById(button.dataset.agentStart);
+ const error = button.closest(".card").querySelector("[data-agent-error]");
+ error.hidden = true;
+ button.hidden = true;
+ player.hidden = false;
+ player.src = player.dataset.agentStream;
+ player.play().catch(() => {
+  if (player.hidden) return;
+  stopAgentPlayer(player);
+  error.textContent = "Couldn’t start this station. Please try again.";
+  error.hidden = false;
+ });
+});
+document.addEventListener("pause", event => {
+ if (event.target.matches?.("audio[data-agent-stream]")) stopAgentPlayer(event.target);
+}, true);
+document.addEventListener("error", event => {
+ const player = event.target;
+ if (!player.matches?.("audio[data-agent-stream]")) return;
+ const error = player.closest(".card").querySelector("[data-agent-error]");
+ stopAgentPlayer(player);
+ error.textContent = "Couldn’t play this station. Check that enough music is available, then try again.";
+ error.hidden = false;
+}, true);
+document.addEventListener("htmx:beforeSwap", event => {
+ if (event.detail.target?.id !== "content") return;
+ const next = new DOMParser().parseFromString(event.detail.serverResponse, "text/html");
+ for (const player of document.querySelectorAll("audio[data-agent-stream]")) {
+  if (!next.getElementById("card-" + player.id)) stopAgentPlayer(player);
+ }
+});

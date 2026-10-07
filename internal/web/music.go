@@ -6,8 +6,56 @@ import (
 	"net/http"
 	"net/url"
 	"retroradio.local/server/internal/content"
+	"retroradio.local/server/internal/model"
 	"strconv"
 )
+
+type agentStationCard struct {
+	ID, Name, Description, StreamURL string
+}
+
+func (a *App) listenAgent(w http.ResponseWriter, r *http.Request) {
+	agent, ok := a.Music.(content.AgentProvider)
+	streamer, canStream := a.Music.(interface {
+		ServeQueue(http.ResponseWriter, *http.Request)
+	})
+	if !ok || !canStream || !agent.AgentFMAvailable() {
+		http.Error(w, "Agent radio is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	query, queryErr := url.ParseQuery(r.URL.RawQuery)
+	if queryErr != nil {
+		http.Error(w, "Invalid station selection", http.StatusBadRequest)
+		return
+	}
+	// Browser probes must not create sessions or start online preparation.
+	if r.Method == "HEAD" {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Header().Set("Cache-Control", "no-store")
+		return
+	}
+	var session string
+	var err error
+	if raw := query.Get("genre"); query.Has("genre") {
+		folder, decodeErr := base64.RawURLEncoding.DecodeString(raw)
+		genre, available := a.Music.(content.GenreAgentProvider)
+		if decodeErr != nil || len(folder) == 0 || len(folder) > 2048 || !available {
+			http.Error(w, "Invalid genre", http.StatusBadRequest)
+			return
+		}
+		_, session, err = genre.StartGenreFM(r.Context(), string(folder), model.LegacyXML)
+	} else {
+		_, session, err = agent.StartAgentFM(r.Context(), model.LegacyXML)
+	}
+	if err != nil {
+		http.Error(w, "This station could not start. Check that enough music is available.", http.StatusServiceUnavailable)
+		return
+	}
+	request := r.Clone(r.Context())
+	request.URL.Path = "/stream/upnp-queue/" + session
+	request.URL.RawQuery = "listener=web"
+	streamer.ServeQueue(w, request)
+}
 
 type musicEntry struct {
 	Title, BrowseURL, PlayURL       string
@@ -43,6 +91,9 @@ func (a *App) musicView(r *http.Request, v *view) {
 		object = string(b)
 	}
 	v.MusicRootPage = object == "0"
+	if agent, ok := a.Music.(content.AgentProvider); ok && agent.AgentFMAvailable() && v.MusicRootPage {
+		v.AgentStation = &agentStationCard{ID: "agent-fm", Name: "Agent FM", Description: "A personal radio station with music from your library and spoken links from your AI DJ.", StreamURL: "/music/agent"}
+	}
 	offset := 0
 	if raw := r.URL.Query().Get("offset"); raw != "" {
 		n, e := strconv.Atoi(raw)
@@ -71,6 +122,12 @@ func (a *App) musicView(r *http.Request, v *view) {
 	}
 	v.MusicConnected = true
 	v.MusicTitle = result.Title
+	if agent, ok := a.Music.(content.AgentProvider); ok && agent.AgentFMAvailable() && result.Genre {
+		if _, ok := a.Music.(content.GenreAgentProvider); ok {
+			token := base64.RawURLEncoding.EncodeToString([]byte(object))
+			v.AgentStation = &agentStationCard{ID: "genre-fm-" + token, Name: "[" + result.Title + " FM]", Description: "Your AI DJ plays music only from this genre, with spoken links between tracks.", StreamURL: "/music/agent?genre=" + url.QueryEscape(token)}
+		}
+	}
 	if !v.MusicRootPage {
 		v.Title = result.Title
 	}

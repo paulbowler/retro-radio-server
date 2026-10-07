@@ -76,3 +76,5 @@ body{padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-ri
 .music-track{min-width:0;display:flex;flex-direction:column;gap:20px}.music-track-heading{display:flex;align-items:flex-start;gap:16px}.music-track-artwork{flex:none;width:120px;height:120px;object-fit:cover;border-radius:8px}.music-track-details{min-width:0;overflow-wrap:anywhere}.music-track-details h3,.music-track-details p{margin:0 0 6px}.music-player{display:block;width:100%;margin-top:auto}@media(min-width:600px){.music-track-artwork{width:160px;height:160px}}@media(max-width:340px){.music-track-artwork{width:90px;height:90px}.music-track-heading{gap:12px}}
 
 .page-back{display:inline-flex;align-items:center;min-height:44px;margin:0 0 12px;text-decoration:none;color:var(--muted)}.page-back:hover{color:var(--green);text-decoration:underline}.page-back:focus-visible{outline:2px solid var(--green);outline-offset:4px;border-radius:4px}
+
+.music-track [hidden]{display:none}

@@ -176,3 +176,20 @@ performed by the language model and should be checked with your own examples.
 After rebuilding, reopen the Pure's menu, verify the unbracketed top-level
 name, then open a genre and select its bracketed FM station. Listen through
 several transitions to confirm the selected music stays within that genre.
+
+## Listening in the web app
+
+Open Music to find the Agent FM card, or browse into a NAS genre to find its
+`[Jazz FM]`/`[Classical FM]` card. Press Listen to start a new browser session.
+Both use the same DJ, voice setting, genre restrictions and Retro Radio image
+as the Pure. The browser stream does not change what the Pure is playing.
+
+Pausing, starting another player, or navigating away closes the Agent stream
+and cancels preparation. Press Listen again to start a fresh session. The
+Music page's automatic refresh preserves its Agent player. Opening the menu
+or probing the audio endpoint with HEAD does not start a session or API calls.
+Playback uses the web app's existing management authentication.
+
+Browser audio uses the regular player and does not display the stream's ICY
+track text; the card displays the station name. The Pure still receives the
+changing track text as before.
