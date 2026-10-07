@@ -261,6 +261,12 @@ func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p 
 		if err != nil {
 			return err
 		}
+		// Remember only a link successfully inserted into the programme, never a
+		// prepared-but-skipped, expired or failed announcement. Record it before
+		// preparing the following link, even if the encoder is slightly ahead.
+		if len(trimAgentSpeech(speech)) > 0 {
+			q.rememberLink(link.text)
+		}
 		m.mu.Lock()
 		q.history = append(q.history, item.PlaybackID)
 		if len(q.history) > 20 {

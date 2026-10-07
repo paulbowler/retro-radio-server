@@ -27,7 +27,7 @@ func TestOnlineChoiceAndSpeech(t *testing.T) {
 		}
 		switch r.URL.Path {
 		case "/responses":
-			if p["store"] != false || p["model"] != "gpt-4o-mini" {
+			if p["store"] != false || p["model"] != "gpt-6.1-sol" || p["max_output_tokens"] != float64(2048) || p["reasoning"].(map[string]any)["effort"] != "low" {
 				t.Error(p)
 			}
 			if !strings.Contains(p["input"].(string), "Next artist") || !strings.Contains(p["instructions"].(string), "untrusted") {
@@ -161,8 +161,11 @@ func TestEditorialContextSentToOnlineDJ(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		if len(input.Current.Recent) != 5 || input.Current.Recent[0].Title != "b" || len(input.Current.Recent[0].Recent) != 0 {
+		if len(input.Current.Recent) != 5 || input.Current.Recent[0].Title != "b" || len(input.Current.Recent[0].Recent) != 0 || len(input.Current.Recent[0].RecentLinks) != 0 {
 			t.Error(input.Current)
+		}
+		if len(input.Current.RecentLinks) != MaxRecentLinks || input.Current.RecentLinks[0] != "Link 2" || len([]rune(input.Current.RecentLinks[MaxRecentLinks-1])) != MaxLinkChars {
+			t.Error("missing or unbounded programme memory", input.Current.RecentLinks)
 		}
 		track := input.Candidates[1]
 		if track.Artist != "Bonnie Tyler" || track.Composer != "Jim Steinman" || track.Genre != "Pop" || track.Date != "1983" || track.Duration != "0:06:57" {
@@ -175,10 +178,49 @@ func TestEditorialContextSentToOnlineDJ(t *testing.T) {
 	c.base = server.URL
 	current := Track{Title: "Previous"}
 	for _, title := range []string{"a", "b", "c", "d", "e", "f"} {
-		current.Recent = append(current.Recent, Track{Title: title, Recent: []Track{{Title: "nested"}}})
+		current.Recent = append(current.Recent, Track{Title: title, Recent: []Track{{Title: "nested"}}, RecentLinks: []string{"nested chatter"}})
 	}
+	for i := 0; i < MaxRecentLinks+1; i++ {
+		current.RecentLinks = append(current.RecentLinks, fmt.Sprintf("Link %d", i))
+	}
+	current.RecentLinks = append(current.RecentLinks, strings.Repeat("é", MaxLinkChars+20))
 	segment, err := c.Prepare(context.Background(), current, []Track{{Title: "Other"}, {Title: "Total Eclipse of the Heart", Artist: "Bonnie Tyler", Composer: "Jim Steinman", Genre: "Pop", Date: "1983", Duration: "0:06:57"}})
 	if err != nil || segment.Index != 1 || !strings.Contains(segment.Text, "Bonnie Tyler") {
 		t.Fatal(segment, err)
+	}
+}
+
+func TestTextModelReasoningBudget(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-sol", "gpt-6-luna", "gpt-6-astra", "gpt-4o-mini"} {
+		t.Run(model, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/audio/speech" {
+					w.Write([]byte("MP3"))
+					return
+				}
+				var request map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					t.Error(err)
+					return
+				}
+				if request["model"] != model {
+					t.Error(request["model"])
+				}
+				if model == "gpt-4o-mini" {
+					if request["reasoning"] != nil || request["max_output_tokens"] != float64(500) {
+						t.Error(request)
+					}
+				} else if request["reasoning"].(map[string]any)["effort"] != "low" || request["max_output_tokens"] != float64(2048) {
+					t.Error(request)
+				}
+				fmt.Fprint(w, `{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"index\":0,\"chat\":\"Here is the next track.\"}"}]}]}`)
+			}))
+			defer server.Close()
+			c := New(Config{Key: "test", TextModel: model})
+			c.base = server.URL
+			if _, err := c.Prepare(context.Background(), Track{}, []Track{{Title: "Next"}}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }

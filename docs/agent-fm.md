@@ -5,14 +5,14 @@ Podcasts and Music. It chooses music from the discovered UPnP audio servers;
 you do not have to open an album or choose a playlist first.
 
 The first track starts immediately after the library scan. While it plays,
-the server sends candidate track metadata to OpenAI's Responses API to choose
-the next track and write a short DJ link, then sends that text and delivery
-instructions to the Speech API. The rendered voice is downloaded, normalized
-and saved in a temporary MP3 file. At the end of the current track, the voice
-plays and the chosen track follows on the same HTTP connection. The process
-repeats until you stop or select something else. Completed music and speech
-files are not retained. This first iteration plays links **between** tracks;
-it does not talk over a song or crossfade.
+the server sends candidate track metadata and recent programme context to
+OpenAI's Responses API to choose the next track and write a DJ link, then
+sends the script to the Speech API. The downloaded voice is decoded into a
+private temporary PCM cache. Music and speech pass through one continuous MP3
+encoder: the DJ overlaps the last three seconds of the song where possible,
+with the music ducked, and the chosen next track follows without a new stream.
+Preparation repeats until you stop or select something else; temporary audio
+files are deleted after use.
 
 ## Enable it on your existing server
 
@@ -46,8 +46,8 @@ just restarting a container does not update its environment; recreate it with
 `docker compose up -d`. The discovery helper does not receive the API key.
 For a non-Docker installation, supply the same environment variables to the
 Retro Radio service and restart it. FFmpeg must be installed; the Docker image
-already includes it. Agent FM's audio normalization is enabled independently
-of the ordinary FLAC fallback setting.
+already includes it. Agent FM's programme decoding runs independently of
+the ordinary FLAC fallback setting.
 
 ## Radio test
 
@@ -74,11 +74,49 @@ UPnP tracks must be available to start the station.
 These optional `.env` values have defaults:
 
 ```dotenv
-RETRO_AGENT_TEXT_MODEL=gpt-4o-mini
+RETRO_AGENT_TEXT_MODEL=gpt-6.1-sol
 RETRO_AGENT_SPEECH_MODEL=gpt-4o-mini-tts
 RETRO_AGENT_VOICE=ballad
 RETRO_AGENT_DELIVERY="Speak as a warm British music presenter, conversational and relaxed, with natural inflection and varied rhythm."
 ```
+
+GPT-6.1 Sol is the default text model for the more demanding music-editorial
+prompt. Existing `.env` files that explicitly set `gpt-4o-mini` retain that
+choice: change `RETRO_AGENT_TEXT_MODEL=gpt-6.1-sol` and recreate the container
+to upgrade. For the cheaper alternative, use `RETRO_AGENT_TEXT_MODEL=gpt-6-luna`
+(the currently documented Luna API name is GPT-6 Luna, not GPT-6.1 Luna).
+Both models use low reasoning effort and a bounded 2,048-token output budget,
+including reasoning, within the same 40-second preparation deadline. Speech
+and optional local research keep their existing separate models. Text, speech
+and web search charges are separate; see the current
+[model prices](https://developers.openai.com/api/docs/pricing).
+
+### Presenter personality and memory
+
+The DJ is a warm, curious British music enthusiast with understated humour
+and a considered musical point of view. Links vary in length and editorial
+angle: interpretation, arrangements, career context, musical influences or
+connections between records, rather than stock energy/mood transitions.
+The usual target is 35–80 words, with shorter identifications when little is
+known and occasional longer stories. Local updates allow up to 120 words.
+
+Each station queue remembers its last twelve links inserted successfully into
+the audio programme, oldest first, alongside five recent tracks. The next
+request receives this context to avoid repeated phrasing, stories and facts,
+and occasionally develop a previous musical thread. Failed, late, expired or
+unavailable speech is not remembered. Recording happens after audio insertion
+so the next preparation knows about the preceding link even when the encoder
+is slightly ahead of playback. This cannot confirm what a disconnected radio
+actually heard. Memory stays with a queue across reconnections; selecting a
+new station or restarting the server starts fresh. Stations do not share it.
+It is bounded and held in memory, with no transcript database or extra API
+calls. Previous scripts are context, not factual evidence. Metadata, not
+music audio or NAS URLs, is sent to the text model.
+
+The model may use confident, established music knowledge, but this change does
+not add recording research or guarantee factual accuracy. It must distinguish
+performer from composer, avoid invented listening observations and personal
+biography, and keep unfamiliar recordings' introductions grounded in tags.
 
 Choose the voice in the web app's Settings (the cog button), under **Agent FM
 voice**, and save. Ballad is the default. A saved voice overrides

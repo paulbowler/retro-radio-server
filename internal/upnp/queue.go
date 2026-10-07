@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"retroradio.local/server/internal/agentfm"
@@ -26,6 +27,8 @@ type musicQueue struct {
 	volume  func() int
 	name    string
 	history []string
+	linkMu  sync.Mutex
+	links   []string
 	agent   agentfm.Service
 	ffmpeg  string
 	tracks  []content.Item

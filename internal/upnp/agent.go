@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -145,6 +146,7 @@ func convertAgentAudio(parent context.Context, path, format string, source io.Re
 type agentLink struct {
 	index        int
 	path         string
+	text         string
 	expires      time.Time
 	localStarted func()
 	localAllowed func() bool
@@ -160,6 +162,29 @@ func (a agentLink) remove() {
 	}
 }
 
+// Memory belongs to this programme, not the API client shared by all stations.
+func (q *musicQueue) recentLinks() []string {
+	q.linkMu.Lock()
+	defer q.linkMu.Unlock()
+	return append([]string(nil), q.links...)
+}
+func (q *musicQueue) rememberLink(text string) {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	runes := []rune(text)
+	if len(runes) > agentfm.MaxLinkChars {
+		text = string(runes[:agentfm.MaxLinkChars])
+	}
+	q.linkMu.Lock()
+	defer q.linkMu.Unlock()
+	q.links = append(q.links, text)
+	if len(q.links) > agentfm.MaxRecentLinks {
+		q.links = q.links[len(q.links)-agentfm.MaxRecentLinks:]
+	}
+}
+
 type agentJob struct {
 	done   chan struct{}
 	cancel context.CancelFunc
@@ -169,6 +194,7 @@ type agentJob struct {
 func prepareAgentLink(parent context.Context, q *musicQueue, current content.Item, remaining []content.Item) *agentJob {
 	ctx, cancel := context.WithTimeout(parent, 40*time.Second)
 	job := &agentJob{done: make(chan struct{}), cancel: cancel}
+	links := q.recentLinks()
 	history := append([]string(nil), q.history[max(0, len(q.history)-5):]...)
 	go func() {
 		defer close(job.done)
@@ -178,6 +204,7 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 			candidates[i] = agentTrack(t)
 		}
 		present := agentTrack(current)
+		present.RecentLinks = links
 		// Snapshot the short listening history before the main loop advances it.
 		for _, id := range history {
 			for _, track := range q.tracks {
@@ -227,6 +254,7 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 			return
 		}
 		job.link.path = file.Name()
+		job.link.text = segment.Text
 		job.link.expires = segment.Expires
 		job.link.localStarted, job.link.localAllowed = segment.LocalStarted, segment.LocalAllowed
 		keep = true

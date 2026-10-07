@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -118,7 +119,15 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 				t.Fatal(err)
 			}
 			m.agentFFmpeg = ffmpeg
+			calls := 0
 			m.agent = agentServiceFunc(func(_ context.Context, current agentfm.Track, c []agentfm.Track) (agentfm.Segment, error) {
+				calls++
+				if fail && len(current.RecentLinks) != 0 {
+					t.Error("failed speech entered memory")
+				}
+				if !fail && calls == 2 && (len(current.RecentLinks) != 1 || current.RecentLinks[0] != "First spoken link") {
+					t.Error("previous link missing from next preparation", current.RecentLinks)
+				}
 				if fail {
 					return agentfm.Segment{}, errors.New("simulated API unavailable")
 				}
@@ -128,10 +137,10 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 				}
 				for i, v := range c {
 					if v.Title == want {
-						return agentfm.Segment{Index: i, Audio: speech}, nil
+						return agentfm.Segment{Index: i, Text: "First spoken link", Audio: speech}, nil
 					}
 				}
-				return agentfm.Segment{Audio: speech}, nil
+				return agentfm.Segment{Text: "First spoken link", Audio: speech}, nil
 			})
 			_, id, err := m.createQueue(context.Background(), tracks, model.LegacyXML, true)
 			if err != nil {
@@ -434,10 +443,14 @@ func TestAgentSuppliesEditorialMetadataAndRecentHistory(t *testing.T) {
 		received, offered = current, candidates
 		return agentfm.Segment{}, errors.New("no speech needed")
 	})}
+	q.rememberLink("Earlier commentary")
 	job := prepareAgentLink(context.Background(), q, tracks[7], tracks[:2])
 	defer job.close()
 	<-job.done
 	if len(received.Recent) != 5 || received.Recent[0].Title != "c" || received.Recent[4].Title != "g" {
+		t.Fatal(received)
+	}
+	if len(received.RecentLinks) != 1 || received.RecentLinks[0] != "Earlier commentary" {
 		t.Fatal(received)
 	}
 	for _, track := range append(offered, received) {
@@ -461,5 +474,28 @@ func TestCachedLocalLinkExpiresOrStopsWhenSettingsChange(t *testing.T) {
 	allowed = true
 	if !link.playable(now) {
 		t.Fatal("valid cached bulletin rejected")
+	}
+}
+
+func TestAgentProgrammeMemoryBoundedAndIsolated(t *testing.T) {
+	q := &musicQueue{}
+	for i := 0; i < agentfm.MaxRecentLinks+2; i++ {
+		q.rememberLink(fmt.Sprintf("Link %d", i))
+	}
+	q.rememberLink(" ")
+	links := q.recentLinks()
+	if len(links) != agentfm.MaxRecentLinks || links[0] != "Link 2" {
+		t.Fatal(links)
+	}
+	links[0] = "changed snapshot"
+	if q.recentLinks()[0] != "Link 2" {
+		t.Fatal("snapshot mutated memory")
+	}
+	if len((&musicQueue{}).recentLinks()) != 0 {
+		t.Fatal("station memory leaked")
+	}
+	q.rememberLink(strings.Repeat("é", agentfm.MaxLinkChars+1))
+	if len([]rune(q.recentLinks()[agentfm.MaxRecentLinks-1])) != agentfm.MaxLinkChars {
+		t.Fatal("unbounded script")
 	}
 }
