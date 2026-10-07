@@ -104,8 +104,8 @@ The short link is an AI-generated voice; it is not a recording of a human DJ.
   remain. With a small library, older tracks can repeat. The agent receives
   title, performer, album and available composer/genre/date/duration tags, plus
   up to five recently played tracks; NAS URLs and audio files are never sent.
-- Speech preparation has a 40-second total deadline. If it is not ready at the
-  boundary, it is cancelled and music continues immediately. A valid track
+- Speech preparation has a 40-second total deadline. If it is not ready before
+  the buffered music tail, it is cancelled and music continues immediately. A valid track
   choice is kept if speech alone fails; invalid or late choices use a random
   available candidate. There are no retries or queued late announcements.
 - Music and speech use a consistent 128 kbps, 44.1 kHz stereo MP3 stream. FFmpeg
@@ -130,8 +130,11 @@ invalid track choices, API failures and cancellation; the Pure top-level menu
 and lookup; one stream containing music → speech → agent-selected music with
 changing ICY text; fallback music; late-job cancellation and file cleanup.
 An FFmpeg integration test generates sources at different sample rates and
-checks that the joined normalized MP3 segments decode together. The CI workflow
-installs FFmpeg and runs these alongside the existing Play All tests.
+checks that a single programme encoder handles them. PCM tests measure saved
+25% versus 400% gain, exact overlap length, ducking and bounded silence trimming.
+FFmpeg tests measure gain after MP3 encoding and consume the full NAS → music/
+speech mixer → MP3 → ICY path, including cancellation and changing track text.
+The CI workflow installs FFmpeg and runs these alongside the Play All tests.
 
 ### Artwork during playback
 
@@ -211,25 +214,44 @@ are unchanged.
 
 DJ voice volume ranges from 25% to 400%. Existing installations keep 100%. Try
 200% if spoken links are too quiet. This scales only the cached spoken announcement
-locally before playback; music is unchanged. A limiter controls peaks when
-volume is changed. Both settings persist across restarts, in browser, Pure and genre sessions.
+in the PCM mixer; music is ducked only while speech overlaps it. A peak clamp
+prevents overload. Both settings persist across restarts, in browser, Pure and genre sessions.
 Voice selection applies to the next link prepared. Voice volume is read when
 the next announcement starts, including announcements already cached. There is no album-specific loudness matching.
 
-## Track transitions
+## Track transitions and voice gain
 
-Agent FM retains one HTTP connection throughout music and speech; it does not
-reselect a station at each boundary. While the current song plays, the server
-prepares the DJ link, then opens and primes the chosen next NAS track. The next
-track's bounded decoder pipe provides backpressure rather than caching an
-entire album. Track metadata and playback history advance only at handover.
-Stopping cancels preparation and closes the unused future audio.
+Agent FM uses one HTTP connection and **one MP3 encoder for the entire session**.
+Music and cached speech are decoded to 44.1 kHz stereo float PCM before mixing.
+The final output remains 128 kbps MP3; mixed source codecs need no new NAS setup.
+There is one pacing clock, with no per-song encoder reset or end-of-segment wait.
 
-This removes NAS lookup and decoder startup from the normal track boundary.
-If preparation is late or prefetch fails, playback uses the existing fallback
-and may still need to open a track. Silence contained in a recording remains
-part of that recording. Speech-volume adjustments process the small cached
-announcement locally at handover; they do not regenerate its voice online.
+While a song plays, the server prepares the DJ link and primes the chosen next
+NAS decoder. A bounded five-second music tail lets the mixer start the chat over
+up to the final three seconds of actual music, with music at 25% underneath.
+If chat lasts longer, it continues after that music ends, then the next song
+starts directly. Short tracks have a shorter overlap. If the link is late or
+fails, music continues without the chat. Preparation is checked before the
+buffered tail is sent; no online work is awaited at that boundary.
+
+Up to two seconds of near-digital silence below -60 dBFS are removed from track
+edges and cached speech edges. Quiet music above that threshold is preserved;
+longer intentional silence is not removed in full. Source stalls, missing next
+tracks or incomplete online preparation can still affect playback. Decoder pipes
+and the five-second tail bound memory; no whole album is cached.
+
+The saved DJ volume scales the actual speech PCM samples, immediately before
+mixing. At non-clipping levels 400% is four times the amplitude of 100%; 25% is
+one quarter. Music is unchanged apart from the deliberate ducking during speech.
+The final mix is peak-clamped to prevent overload. There is no automatic loudness
+normalization after the gain that could undo it. Changes can affect speech already
+cached, without regenerating the voice online. Save the setting in the app.
+Server logs report the applied voice gain and overlap at each spoken link.
+
+ICY titles and playback observations follow positions in the encoded programme,
+rather than the ahead-of-playback decoder. Stopping cancels the encoder, online
+preparation and future NAS decoder and removes private speech files. The fixed
+Retro Radio artwork remains unchanged.
 
 ## Curated selection and track introductions
 

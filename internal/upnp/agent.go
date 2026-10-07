@@ -9,10 +9,8 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"os/exec"
-	"strconv"
 	"sync"
 	"time"
 
@@ -68,8 +66,8 @@ func agentTrack(t content.Item) agentfm.Track {
 	return agentfm.Track{Title: t.Title, Artist: t.Artist, Album: t.Album, Composer: t.Composer, Genre: t.GenreName, Date: t.Date, Duration: t.Duration}
 }
 
-// Every Agent FM source is normalized to the same 128k/44.1k stereo MP3
-// profile. FFmpeg sees checked bytes only and cannot fetch URLs or open files.
+// FFmpeg sees checked bytes only and cannot fetch URLs or open files.
+// Decoders and the session encoder share cancellation and bounded pipes.
 type agentAudio struct {
 	io.Reader
 	cmd    *exec.Cmd
@@ -98,13 +96,23 @@ func (a *agentAudio) Close() error {
 	a.wait()
 	return nil
 }
-func normalizeAgentAudio(parent context.Context, path, format string, source io.ReadCloser, volume ...int) (io.ReadCloser, error) {
+
+// Every input is decoded to one PCM profile; only the final programme is encoded.
+func convertAgentAudio(parent context.Context, path, format string, source io.ReadCloser, encode bool) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(parent)
-	cmd := exec.CommandContext(ctx, path, "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "pipe", "-f", format, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-threads", "1", "-map_metadata", "-1", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-id3v2_version", "0", "-write_xing", "0", "-f", "mp3", "-flush_packets", "1", "pipe:1")
-	if len(volume) > 0 && volume[0] >= 25 && volume[0] <= 400 && volume[0] != 100 {
-		filter := "volume=" + strconv.FormatFloat(float64(volume[0])/100, 'f', 2, 64) + ",alimiter=limit=0.95:level=0"
-		cmd.Args = append(cmd.Args[:len(cmd.Args)-1], "-af", filter, "pipe:1")
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "pipe", "-probesize", "32768", "-analyzeduration", "0", "-f", format}
+	if format == "f32le" {
+		args = append(args, "-ar", "44100", "-ac", "2")
 	}
+	args = append(args, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-threads", "1", "-map_metadata", "-1", "-ar", "44100", "-ac", "2")
+	if encode {
+		args = append(args, "-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "0", "-write_xing", "0", "-f", "mp3")
+	} else {
+		args = append(args, "-c:a", "pcm_f32le", "-f", "f32le")
+	}
+	args = append(args, "-flush_packets", "1", "pipe:1")
+	cmd := exec.CommandContext(ctx, path, args...)
+
 	cmd.Env = []string{}
 	cmd.WaitDelay = time.Second
 	cmd.Stdin = source
@@ -185,8 +193,8 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 		if len(segment.Audio) == 0 || len(segment.Audio) > agentfm.MaxAudio {
 			return
 		}
-		// Cache at the original level; the saved gain is read at playback time.
-		audio, e := normalizeAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)))
+		// Cache decoded speech so handover needs neither an API call nor a decoder.
+		audio, e := convertAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)), false)
 		if e != nil {
 			log.Print("Agent FM: speech conversion failed; continuing music")
 			return
@@ -204,8 +212,8 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 				os.Remove(file.Name())
 			}
 		}()
-		n, e := io.Copy(file, io.LimitReader(audio, agentfm.MaxAudio+1))
-		if e != nil || n == 0 || n > agentfm.MaxAudio || ctx.Err() != nil {
+		n, e := io.Copy(file, io.LimitReader(audio, maxAgentSpeechPCM+1))
+		if e != nil || n == 0 || n > maxAgentSpeechPCM || ctx.Err() != nil {
 			return
 		}
 		if e = file.Close(); e != nil {
@@ -229,21 +237,6 @@ func (j *agentJob) ready() agentLink {
 	}
 }
 
-func agentSpeech(ctx context.Context, q *musicQueue, path string) (io.ReadCloser, error) {
-	speech, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	volume := 100
-	if q.volume != nil {
-		volume = q.volume()
-	}
-	if volume == 0 || volume == 100 {
-		return speech, nil
-	}
-	return normalizeAgentAudio(ctx, q.ffmpeg, "mp3", speech, volume)
-}
-
 func (m *Manager) openAgentTrack(ctx context.Context, q *musicQueue, item content.Item) (content.Playback, io.ReadCloser, error) {
 	play, source, _, err := m.openQueueTrack(ctx, item.PlaybackID, q.caps)
 	if err != nil {
@@ -253,7 +246,7 @@ func (m *Manager) openAgentTrack(ctx context.Context, q *musicQueue, item conten
 	if play.Codec() == "AAC" {
 		format = "aac"
 	}
-	audio, err := normalizeAgentAudio(ctx, q.ffmpeg, format, source)
+	audio, err := convertAgentAudio(ctx, q.ffmpeg, format, source, false)
 	return play, audio, err
 }
 
@@ -321,149 +314,6 @@ func (j *agentTrackJob) close() {
 	if j.track != nil {
 		j.track.audio.Close()
 	}
-}
-
-func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *musicQueue, index int) {
-	w.Header().Set("Content-Type", "audio/mpeg")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Accept-Ranges", "none")
-	w.Header().Set("icy-name", q.name)
-	icy := r.Header.Get("Icy-MetaData") == "1"
-	if icy {
-		w.Header().Set("icy-metaint", "4096")
-	}
-	if r.Method == "HEAD" {
-		w.WriteHeader(200)
-		return
-	}
-	rc := http.NewResponseController(w)
-	defer rc.SetWriteDeadline(time.Time{})
-	writer := queueICY{w: w, remaining: 4096, enabled: icy}
-	started := false
-	var primed *primedAgentTrack
-	defer func() {
-		if primed != nil {
-			primed.audio.Close()
-		}
-	}()
-	for {
-		item := q.tracks[index]
-		var play content.Playback
-		var audio io.ReadCloser
-		var e error
-		if primed != nil {
-			play, audio = primed.play, primed.audio
-			primed = nil
-		} else {
-			play, audio, e = m.openAgentTrack(r.Context(), q, item)
-		}
-		if e != nil {
-			if !started {
-				http.Error(w, "Agent FM track unavailable", 502)
-			}
-			return
-		}
-		// Start online preparation before sending this track, one transition ahead.
-		candidates := agentCandidates(q, item)
-		job := prepareAgentLink(r.Context(), q, item, candidates)
-		nextAudio := m.primeAgentTrack(r.Context(), q, job, candidates)
-		writer.title = queueTitle(play.Item)
-		if !started {
-			w.WriteHeader(200)
-			started = true
-		}
-		// Normalized output is also reflected in the existing playback observer.
-		play.Transcode = true
-		complete := m.writeAgentAudio(r, w, rc, &writer, audio, &play)
-		audio.Close()
-		if !complete {
-			nextAudio.close()
-			if job != nil {
-				job.close()
-			}
-			return
-		}
-		link := agentLink{}
-		if job != nil {
-			link = job.ready()
-		}
-		next := candidates[link.index]
-		primed = nextAudio.take(next.PlaybackID)
-		nextAudio.close()
-		m.mu.Lock()
-		q.history = append(q.history, item.PlaybackID)
-		if len(q.history) > 20 {
-			q.history = q.history[len(q.history)-20:]
-		}
-		for i, t := range q.tracks {
-			if t.PlaybackID == next.PlaybackID {
-				index = i
-				break
-			}
-		}
-		q.next = index
-		q.seen = time.Now()
-		m.mu.Unlock()
-		if link.path != "" {
-			speech, e := agentSpeech(r.Context(), q, link.path)
-			if e == nil {
-				writer.title = q.name + " - Up next: " + queueTitle(next)
-				complete = m.writeAgentAudio(r, w, rc, &writer, speech, nil)
-				speech.Close()
-			}
-		}
-		if job != nil {
-			job.close()
-		}
-		if !complete {
-			return
-		}
-	}
-}
-
-// A constant output profile gives predictable pacing for music and speech.
-func (m *Manager) writeAgentAudio(r *http.Request, w http.ResponseWriter, rc *http.ResponseController, writer *queueICY, audio io.Reader, play *content.Playback) bool {
-	wait := m.queueWait
-	if wait == nil {
-		wait = waitQueue
-	}
-	start := time.Now()
-	sent := int64(0)
-	var finish func(bool)
-	complete := false
-	defer func() {
-		if finish != nil {
-			finish(complete)
-		}
-	}()
-	buffer := make([]byte, 4096)
-	for {
-		n, e := audio.Read(buffer)
-		if n > 0 {
-			due := start.Add(time.Duration(float64(sent+int64(n)) / 16000 * float64(time.Second))).Add(-250 * time.Millisecond)
-			if wait(r.Context(), time.Until(due)) != nil {
-				return false
-			}
-			_ = rc.SetWriteDeadline(time.Now().Add(20 * time.Second))
-			written, err := writer.Write(buffer[:n])
-			if err != nil || written != n {
-				return false
-			}
-			sent += int64(n)
-			if finish == nil && play != nil && m.PlaybackObserver != nil {
-				finish = m.PlaybackObserver(r, *play)
-			}
-			_ = rc.Flush()
-		}
-		if e != nil {
-			if !errors.Is(e, io.EOF) {
-				return false
-			}
-			break
-		}
-	}
-	complete = wait(r.Context(), time.Until(start.Add(time.Duration(float64(sent)/16000*float64(time.Second))))) == nil
-	return complete
 }
 
 var _ content.AgentProvider = (*Manager)(nil)

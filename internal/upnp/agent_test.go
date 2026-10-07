@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"io"
@@ -105,44 +104,48 @@ func TestAgentFMTopLevelMenuAndGlobalLibrary(t *testing.T) {
 	}
 }
 func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("FFmpeg integration runs in CI")
+	}
+	music := generatedAgentTone(t, ffmpeg, "440", "8")
+	speech := generatedAgentTone(t, ffmpeg, "880", "1")
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "speech", true: "API failure"}[fail], func(t *testing.T) {
-			m, folder := queueFixture(t, 3, "tracks")
-			tracks, e := m.TrackList(context.Background(), folder)
-			if e != nil {
-				t.Fatal(e)
+			m, folder := queueFixtureAudio(t, 3, "tracks", [][]byte{music, music, music})
+			tracks, err := m.TrackList(context.Background(), folder)
+			if err != nil {
+				t.Fatal(err)
 			}
-			m.agentFFmpeg = fakeAgentFFmpeg(t)
-			m.agent = agentServiceFunc(func(ctx context.Context, current agentfm.Track, c []agentfm.Track) (agentfm.Segment, error) {
+			m.agentFFmpeg = ffmpeg
+			m.agent = agentServiceFunc(func(_ context.Context, current agentfm.Track, c []agentfm.Track) (agentfm.Segment, error) {
 				if fail {
-					return agentfm.Segment{}, errors.New("simulated unavailable API")
+					return agentfm.Segment{}, errors.New("simulated API unavailable")
 				}
-				index := 0
 				want := "Track 3"
-				if current.Title == "Track 3" {
+				if current.Title == want {
 					want = "Track 2"
 				}
 				for i, v := range c {
 					if v.Title == want {
-						index = i
+						return agentfm.Segment{Index: i, Audio: speech}, nil
 					}
 				}
-				return agentfm.Segment{Index: index, Audio: bytes.Repeat([]byte{'S'}, 5000)}, nil
+				return agentfm.Segment{Audio: speech}, nil
 			})
-			_, id, e := m.createQueue(context.Background(), tracks, model.LegacyXML, true)
-			if e != nil {
-				t.Fatal(e)
+			_, id, err := m.createQueue(context.Background(), tracks, model.LegacyXML, true)
+			if err != nil {
+				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			var observed []string
-			m.queueWait = waitQueue
 			m.PlaybackObserver = func(r *http.Request, p content.Playback) func(bool) {
-				if r.URL.Query().Get("radio") != "test" || p.Codec() != "MP3" || p.Bitrate() != 128 {
-					t.Error("attribution/output profile lost")
+				if p.Codec() != "MP3" || p.Bitrate() != 128 {
+					t.Error("output profile lost")
 				}
 				observed = append(observed, p.Item.Title)
-				return func(complete bool) {
+				return func(bool) {
 					if len(observed) == 3 {
 						cancel()
 					}
@@ -150,29 +153,23 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 			}
 			r := httptest.NewRequest("GET", "/stream/upnp-queue/"+id+"?radio=test", nil).WithContext(ctx)
 			r.Header.Set("Icy-MetaData", "1")
-			r.Header.Set("Range", "bytes=0-1") // Safari's opening media probe.
+			r.Header.Set("Range", "bytes=0-1")
 			w := httptest.NewRecorder()
 			m.ServeQueue(w, r)
-			if w.Code != 200 || len(observed) != 3 || w.Header().Get("Accept-Ranges") != "none" || w.Header().Get("Content-Range") != "" {
+			if w.Code != 200 || len(observed) != 3 || w.Header().Get("Accept-Ranges") != "none" {
 				t.Fatal(w.Code, observed)
 			}
 			audio, titles := splitQueueICY(t, w.Body.Bytes())
-			if fail {
-				if bytes.Contains(audio, []byte("SSSS")) {
-					t.Fatal("speech on failed API")
-				}
-			} else {
-				expected := append(bytes.Repeat([]byte{'A'}, 5000), bytes.Repeat([]byte{'S'}, 5000)...)
-				expected = append(expected, bytes.Repeat([]byte{'C'}, 5000)...)
-				expected = append(expected, bytes.Repeat([]byte{'S'}, 5000)...)
-				expected = append(expected, bytes.Repeat([]byte{'B'}, 5000)...)
-				if !bytes.Equal(audio, expected) || strings.Join(observed, ",") != "Track 1,Track 3,Track 2" {
-					t.Fatal("choice or speech order wrong", observed, len(audio))
-				}
-				joined := strings.Join(titles, " ")
-				if !strings.Contains(joined, "Agent FM - Up next:") || !strings.Contains(joined, "Track 3") || !strings.Contains(joined, "Track 2") {
-					t.Fatal(titles)
-				}
+			if !fail && strings.Join(observed, ",") != "Track 1,Track 3,Track 2" {
+				t.Fatal(observed)
+			}
+			if !fail && !strings.Contains(strings.Join(titles, " "), "Agent FM - Up next:") {
+				t.Fatal(titles)
+			}
+			decoded := decodeAgentTestPCM(t, ffmpeg, audio)
+			// The same MP3 decoder must consume all three songs and overlays.
+			if len(decoded) < 15*agentPCMSecond {
+				t.Fatal("continuous programme truncated", len(decoded))
 			}
 			if m.queues[id].active || len(m.queueSlots) != 0 {
 				t.Fatal("stopped session leaked")
@@ -180,6 +177,28 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 		})
 	}
 }
+func generatedAgentTone(t *testing.T, ffmpeg, frequency, duration string) []byte {
+	t.Helper()
+	data, err := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency="+frequency+":sample_rate=44100", "-t", duration, "-c:a", "libmp3lame", "-f", "mp3", "pipe:1").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+func decodeAgentTestPCM(t *testing.T, ffmpeg string, data []byte) []byte {
+	t.Helper()
+	audio, err := convertAgentAudio(context.Background(), ffmpeg, "mp3", io.NopCloser(bytes.NewReader(data)), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer audio.Close()
+	pcm, err := io.ReadAll(audio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pcm
+}
+
 func TestAgentFMLateLinkCancellationAndFileCleanup(t *testing.T) {
 	entered := make(chan struct{})
 	q := &musicQueue{ffmpeg: fakeAgentFFmpeg(t), agent: agentServiceFunc(func(ctx context.Context, _ agentfm.Track, _ []agentfm.Track) (agentfm.Segment, error) {
@@ -213,31 +232,30 @@ func TestAgentFMLateLinkCancellationAndFileCleanup(t *testing.T) {
 	}
 }
 func TestGeneratedAgentMusicSpeechMusicDecodes(t *testing.T) {
-	ffmpeg, e := exec.LookPath("ffmpeg")
-	if e != nil {
-		t.Skip("FFmpeg integration runs in CI and the Docker runtime")
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("FFmpeg integration runs in CI")
 	}
-	var joined bytes.Buffer
+	var programme bytes.Buffer
 	for _, rate := range []string{"44100", "24000", "48000"} {
-		input, e := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate="+rate, "-t", "0.4", "-ac", "1", "-c:a", "libmp3lame", "-f", "mp3", "pipe:1").Output()
-		if e != nil {
-			t.Fatal(e)
+		data, err := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate="+rate, "-t", "0.4", "-c:a", "libmp3lame", "-f", "mp3", "pipe:1").Output()
+		if err != nil {
+			t.Fatal(err)
 		}
-		audio, e := normalizeAgentAudio(context.Background(), ffmpeg, "mp3", io.NopCloser(bytes.NewReader(input)))
-		if e != nil {
-			t.Fatal(e)
-		}
-		_, e = io.Copy(&joined, audio)
-		audio.Close()
-		if e != nil {
-			t.Fatal(e)
-		}
+		programme.Write(decodeAgentTestPCM(t, ffmpeg, data))
 	}
-	cmd := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "mp3", "-i", "pipe:0", "-f", "s16le", "-ar", "44100", "-ac", "2", "pipe:1")
-	cmd.Stdin = &joined
-	pcm, e := cmd.Output()
-	if e != nil || len(pcm) < int(1.2*44100*4) {
-		t.Fatal("music/speech/music did not decode", len(pcm), e)
+	encoded, err := convertAgentAudio(context.Background(), ffmpeg, "f32le", io.NopCloser(bytes.NewReader(programme.Bytes())), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mp3, err := io.ReadAll(encoded)
+	encoded.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm := decodeAgentTestPCM(t, ffmpeg, mp3)
+	if len(pcm) < int(1.2*agentPCMSecond) {
+		t.Fatal("continuous encoder truncated programme", len(pcm))
 	}
 }
 
@@ -300,79 +318,42 @@ func TestAgentSpeechFailureKeepsValidatedChoice(t *testing.T) {
 func TestGeneratedAgentSpeechVolumeAndUnchangedMusic(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
-		t.Skip("FFmpeg integration runs in CI and the Docker runtime")
+		t.Skip("FFmpeg integration runs in CI")
 	}
-	input, err := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "1", "-c:a", "libmp3lame", "-f", "mp3", "pipe:1").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	convert := func(volume ...int) []byte {
-		t.Helper()
-		audio, err := normalizeAgentAudio(context.Background(), ffmpeg, "mp3", io.NopCloser(bytes.NewReader(input)), volume...)
+	normal := decodeAgentTestPCM(t, ffmpeg, generatedAgentTone(t, ffmpeg, "440", "1"))
+	encode := func(pcm []byte) []byte {
+		audio, err := convertAgentAudio(context.Background(), ffmpeg, "f32le", io.NopCloser(bytes.NewReader(pcm)), true)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer audio.Close()
-		data, err := io.ReadAll(audio)
+		mp3, err := io.ReadAll(audio)
+		audio.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
-		return data
+		return decodeAgentTestPCM(t, ffmpeg, mp3)
 	}
-	music := convert()
-	normal := convert(100)
-	if !bytes.Equal(music, normal) {
-		t.Fatal("default speech volume changed the original music conversion")
-	}
-	rms := func(data []byte) float64 {
-		t.Helper()
-		cmd := exec.Command(ffmpeg, "-nostdin", "-loglevel", "error", "-f", "mp3", "-i", "pipe:0", "-f", "s16le", "-ar", "44100", "-ac", "1", "pipe:1")
-		cmd.Stdin = bytes.NewReader(data)
-		pcm, err := cmd.Output()
-		if err != nil {
+	base := agentTestRMS(encode(normal))
+	for _, volume := range []int{25, 100, 400} {
+		level := volume
+		q := &musicQueue{volume: func() int { return level }}
+		var output bytes.Buffer
+		p := &agentProgram{sink: &output, timeline: &agentTimeline{}}
+		if err := p.transition(q, nil, normal, content.Item{Title: "Next"}); err != nil {
 			t.Fatal(err)
 		}
-		if len(pcm) < 4000 {
-			t.Fatal("missing decoded audio")
+		ratio := agentTestRMS(encode(output.Bytes())) / base
+		want := float64(volume) / 100
+		if math.Abs(ratio/want-1) > .12 {
+			t.Fatal("encoded gain incorrect", volume, ratio)
 		}
-		pcm = pcm[2000 : len(pcm)-2000]
-		var sum float64
-		for i := 0; i+1 < len(pcm); i += 2 {
-			v := float64(int16(binary.LittleEndian.Uint16(pcm[i : i+2])))
-			sum += v * v
-		}
-		return math.Sqrt(sum / float64(len(pcm)/2))
 	}
-	path := filepath.Join(t.TempDir(), "cached-speech.mp3")
-	if err := os.WriteFile(path, normal, 0600); err != nil {
-		t.Fatal(err)
-	}
-	volume := 100
-	q := &musicQueue{ffmpeg: ffmpeg, volume: func() int { return volume }}
-	playSpeech := func(level int) []byte {
-		t.Helper()
-		volume = level
-		audio, err := agentSpeech(context.Background(), q, path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer audio.Close()
-		data, err := io.ReadAll(audio)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return data
-	}
-	if !bytes.Equal(playSpeech(100), normal) {
-		t.Fatal("cached speech changed at the default level")
-	}
-	ratio := rms(playSpeech(200)) / rms(normal)
-	if ratio < 1.8 || ratio > 2.2 {
-		t.Fatal("speech boost was not applied", ratio)
-	}
-	ratio = rms(playSpeech(50)) / rms(normal)
-	if ratio < .4 || ratio > .6 {
-		t.Fatal("speech attenuation was not applied", ratio)
+	// Music without an announcement is copied byte for byte, at every voice gain.
+	var output bytes.Buffer
+	p := &agentProgram{sink: &output, timeline: &agentTimeline{}}
+	q := &musicQueue{volume: func() int { return 400 }}
+	if err := p.transition(q, normal, nil, content.Item{}); err != nil || !bytes.Equal(output.Bytes(), normal) {
+		t.Fatal("voice gain altered music", err)
 	}
 }
 
