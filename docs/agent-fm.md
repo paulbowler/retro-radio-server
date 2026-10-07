@@ -115,10 +115,9 @@ The short link is an AI-generated voice; it is not a recording of a human DJ.
   Reconnecting resumes at the current chosen track from its beginning. An
   unavailable music source can end the connection; reselect Agent FM to build
   a fresh pool. Very long sessions may need restarting as NAS tokens expire.
-- No live news, weather, events, lyrics or invented music history are requested
-  in this iteration. Links prefer supplied metadata and may add well-established
-  musical background from model knowledge when confident; there is no live fact
-  lookup, so this is not independently verified research.
+- Music-only links prefer supplied metadata and may add well-established musical
+  background from model knowledge when confident. Local news/weather/events use
+  the optional live research described below. Lyrics are never requested.
 
 The API integration uses [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
 and [Text to speech](https://developers.openai.com/api/docs/guides/text-to-speech).
@@ -279,3 +278,63 @@ accuracy and musical taste still need listening checks on the actual library.
 MinimServer documents these role-bearing tags in its
 [displayRole settings](https://minimserver.com/ug-other.html); composer credits
 can appear as `upnp:artist role="Composer"` or `upnp:author role="Composer"`.
+
+## Previous track and occasional local updates
+
+Each spoken link now starts with a brief back-reference to the performer and
+core title of the current song, then introduces the next track. Because the link
+starts over the song's tail, the DJ uses wording such as “That's …” rather than
+claiming that the song has already ended.
+
+After rebuilding, open **Settings**, enable **Occasional local news, weather and
+events**, enter **Winchester, UK** under **Your locality**, and Save. This saved
+override is shared by Pure, browser and genre sessions and survives restarts.
+It always wins over automatic lookup. Local updates and automatic lookup both
+start off; enabling local updates sends the locality and optional source-page
+addresses to OpenAI web search using the existing API key.
+
+If the locality is blank, the separate **Allow approximate public-IP location
+lookup** setting permits an HTTPS request to [ipwho.is](https://ipwhois.io/documentation)
+from the radio server. The service sees its public IP and returns an approximate
+town. The town is used for web research, without sending the IP itself in the
+OpenAI input. This estimates the server's network, not a phone browser's location,
+and can be wrong with ISP gateways, VPNs or remote hosting. Leave this control off
+when using the Winchester override. The settings show the saved/estimated place.
+
+Research uses [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search)
+with `gpt-4.1-mini` by default (`RETRO_AGENT_LOCAL_MODEL` overrides it). This adds
+search/model API charges; no second API key is needed. Only active link preparation
+starts research. One background job runs at a time, with a 25-second deadline,
+and refreshes at most every 30 minutes (15 minutes after failure). It can finish
+a bounded refresh after listening stops; there is no recurring idle scheduler.
+Playback never waits for local research.
+
+The researcher is asked to focus roughly 15 km around the locality, preferring
+council, venue/organiser, official weather and established local-news sources.
+It looks for recent news, worthwhile events in the next seven days, and notable
+weather changes/warnings today. Ordinary weather or a quiet news day can yield
+no update. Public social posts may serve as leads if posted by an organiser or
+corroborated. Optional HTTPS source addresses in Settings steer the search;
+these are public search leads, not authenticated RSS/social subscriptions.
+Private groups, sign-in-only feeds and unindexed posts cannot be read.
+
+Only source URLs returned by search/citations qualify. Date checks reject old
+news, past/distant events and forecasts for another day. Cache validity is at
+most six hours for news/events and one hour for weather; it is checked again at
+actual handover. Turning updates off or changing locality cancels pending
+research and discards old cached local links. The last researched items link to
+their publishers in Settings; the DJ attributes the spoken update but does not
+read URLs aloud. Geographic relevance and the source summary still rely on the
+research model, rather than a measured geofence or independent fact-checker.
+
+One item at most is offered per link, with at least 20 minutes between prepared
+local links. The cooldown also restarts when that link reaches the outgoing
+stream, so a long classical track followed by a short song cannot cause closely
+spaced updates. Story URL/kind/date deduplication lasts 48 hours in server memory
+and resets on restart. A failed or skipped spoken link conservatively consumes
+its offer rather than repeatedly retrying the same story.
+
+Links with a local item follow: previous song → brief attributed local update →
+next track introduction (55–100 words). Other links remain music-only (30–65
+words). The continuous encoder, three-second overlap and voice-volume control
+are unchanged. Music continues if research is unavailable.

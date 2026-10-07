@@ -82,3 +82,43 @@ func TestSettingsModalSaveCountryAndNavigation(t *testing.T) {
 		t.Fatal("settings bypassed login")
 	}
 }
+
+func TestLocalSettingsPersistOverrideAndConsent(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "local.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DB.Close()
+	resets := 0
+	app := &App{Store: db, AgentLocalReset: func() { resets++ }}
+	h := app.Handler()
+	post := func(body string) int {
+		r := httptest.NewRequest("POST", "/preferences", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	body := "buffer=0&quality=auto&country=GB&agent_local_settings=1&agent_local_enabled=on&agent_location=Winchester%2C+UK&agent_local_sources=https%3A%2F%2Fwww.winchester.gov.uk"
+	if post(body) != 204 {
+		t.Fatal("local settings save failed")
+	}
+	saved := db.Settings()
+	if !saved.AgentLocalEnabled || saved.AgentAutoLocation || saved.AgentLocation != "Winchester, UK" || saved.AgentLocalSources != "https://www.winchester.gov.uk" || resets != 1 {
+		t.Fatal(saved, resets)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/preferences", nil))
+	if !strings.Contains(w.Body.String(), `value="Winchester, UK"`) || !strings.Contains(w.Body.String(), "ipwho.is") || !strings.Contains(w.Body.String(), "OpenAI web search") {
+		t.Fatal("saved location or disclosure missing")
+	}
+	if post("buffer=0&quality=auto") != 204 || db.Settings().AgentLocation != saved.AgentLocation || !db.Settings().AgentLocalEnabled {
+		t.Fatal("legacy form erased local settings")
+	}
+	if post("buffer=0&quality=auto&agent_local_settings=1&agent_local_sources=javascript%3Aalert%281%29") != 400 {
+		t.Fatal("invalid source accepted")
+	}
+	if post("buffer=0&quality=auto&agent_local_settings=1&agent_location=Winchester%2C+UK") != 204 || db.Settings().AgentLocalEnabled || db.Settings().AgentAutoLocation {
+		t.Fatal("opt-out failed")
+	}
+}

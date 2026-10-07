@@ -12,6 +12,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
@@ -50,6 +51,9 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 
 type App struct {
 	AgentVoiceDefault    string
+	AgentLocalStatus     func() string
+	AgentLocalItems      func() []agentfm.LocalItem
+	AgentLocalReset      func()
 	Music                content.Provider
 	ArtworkClient        *http.Client
 	artworkMu            sync.Mutex
@@ -134,6 +138,8 @@ type voiceGroup struct {
 
 type view struct {
 	AgentVoiceGroups                            []voiceGroup
+	AgentLocalStatus                            string
+	LocalBulletins                              []agentfm.LocalItem
 	MusicItems                                  []musicEntry
 	AgentStation                                *agentStationCard
 	MusicTitle, MusicParent                     string

@@ -446,3 +446,20 @@ func TestAgentSuppliesEditorialMetadataAndRecentHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestCachedLocalLinkExpiresOrStopsWhenSettingsChange(t *testing.T) {
+	now := time.Now()
+	link := agentLink{path: "cached-speech", expires: now.Add(time.Minute)}
+	if !link.playable(now) || link.playable(now.Add(time.Minute)) {
+		t.Fatal("expired bulletin eligible for speech")
+	}
+	allowed := false
+	link.localAllowed = func() bool { return allowed }
+	if link.playable(now) {
+		t.Fatal("changed/disabled locality played stale cached bulletin")
+	}
+	allowed = true
+	if !link.playable(now) {
+		t.Fatal("valid cached bulletin rejected")
+	}
+}

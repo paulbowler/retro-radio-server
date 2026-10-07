@@ -8,12 +8,16 @@ import (
 )
 
 type Settings struct {
-	AgentVoice    string `json:"agent_voice,omitempty"`
-	AgentVolume   int    `json:"agent_volume,omitempty"` // Percent; zero keeps the legacy 100% default.
-	BufferSeconds int    `json:"buffer_seconds"`
-	AutoReconnect bool   `json:"auto_reconnect"`
-	Quality       string `json:"quality"`
-	Country       string `json:"country"`
+	AgentLocalEnabled bool   `json:"agent_local_enabled,omitempty"`
+	AgentAutoLocation bool   `json:"agent_auto_location,omitempty"`
+	AgentLocation     string `json:"agent_location,omitempty"`
+	AgentLocalSources string `json:"agent_local_sources,omitempty"`
+	AgentVoice        string `json:"agent_voice,omitempty"`
+	AgentVolume       int    `json:"agent_volume,omitempty"` // Percent; zero keeps the legacy 100% default.
+	BufferSeconds     int    `json:"buffer_seconds"`
+	AutoReconnect     bool   `json:"auto_reconnect"`
+	Quality           string `json:"quality"`
+	Country           string `json:"country"`
 }
 
 func DefaultSettings() Settings { return Settings{Quality: "auto"} }
@@ -38,7 +42,7 @@ func (s *Store) Settings() Settings {
 	return settings
 }
 func (s *Store) SaveSettings(settings Settings) error {
-	if (settings.AgentVolume != 0 && (settings.AgentVolume < 25 || settings.AgentVolume > 400)) || (settings.AgentVoice != "" && !agentfm.ValidVoice(settings.AgentVoice)) || settings.BufferSeconds < 0 || settings.BufferSeconds > 10 || (settings.Quality != "auto" && settings.Quality != "low") || (settings.Country != "" && len(settings.Country) != 2) {
+	if len([]rune(settings.AgentLocation)) > 200 || !agentfm.ValidLocalSources(settings.AgentLocalSources) || (settings.AgentVolume != 0 && (settings.AgentVolume < 25 || settings.AgentVolume > 400)) || (settings.AgentVoice != "" && !agentfm.ValidVoice(settings.AgentVoice)) || settings.BufferSeconds < 0 || settings.BufferSeconds > 10 || (settings.Quality != "auto" && settings.Quality != "low") || (settings.Country != "" && len(settings.Country) != 2) {
 		return errors.New("invalid settings")
 	}
 	raw, err := json.Marshal(settings)

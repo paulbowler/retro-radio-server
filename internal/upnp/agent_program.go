@@ -28,10 +28,11 @@ const (
 // A bounded audio timeline lets metadata follow the encoded audio, rather than
 // the producer which can be several packets ahead of the listener.
 type agentCue struct {
-	offset int64
-	title  string
-	play   *content.Playback
-	end    bool
+	offset  int64
+	title   string
+	play    *content.Playback
+	end     bool
+	started func()
 }
 type agentTimeline struct {
 	mu   sync.Mutex
@@ -175,7 +176,7 @@ func (p *agentProgram) music(audio io.Reader) ([]byte, error) {
 		}
 	}
 }
-func (p *agentProgram) transition(q *musicQueue, tail, speech []byte, next content.Item) error {
+func (p *agentProgram) transition(q *musicQueue, tail, speech []byte, next content.Item, onStart ...func()) error {
 	speech = trimAgentSpeech(speech)
 	overlap := min(len(tail), len(speech), agentOverlapBytes)
 	if err := p.write(tail[:len(tail)-overlap]); err != nil {
@@ -183,7 +184,11 @@ func (p *agentProgram) transition(q *musicQueue, tail, speech []byte, next conte
 	}
 	if len(speech) > 0 {
 		log.Printf("Agent FM: voice gain %.0f%%; music overlap %.2fs", agentVoiceGain(q)*100, float64(overlap)/agentPCMSecond)
-		p.cue(q.name+" - Up next: "+queueTitle(next), nil, false)
+		var started func()
+		if len(onStart) > 0 {
+			started = onStart[0]
+		}
+		p.timeline.add(agentCue{offset: p.written, title: q.name + " - Up next: " + queueTitle(next), started: started})
 	}
 	music := tail[len(tail)-overlap:]
 	for len(music) > 0 || len(speech) > 0 {
@@ -245,13 +250,13 @@ func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p 
 		primed = future.take(next.PlaybackID)
 		future.close()
 		var speech []byte
-		if link.path != "" {
+		if link.playable(time.Now()) {
 			speech, err = os.ReadFile(link.path)
 			if err != nil {
 				log.Print("Agent FM: cached speech unavailable; continuing music")
 			}
 		}
-		err = p.transition(q, tail, speech, next)
+		err = p.transition(q, tail, speech, next, link.localStarted)
 		job.close()
 		if err != nil {
 			return err
@@ -336,6 +341,9 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 				if cue.end && finish != nil {
 					finish(true)
 					finish = nil
+				}
+				if cue.started != nil {
+					cue.started()
 				}
 				if cue.title != "" {
 					writer.title = cue.title

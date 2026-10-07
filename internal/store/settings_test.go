@@ -3,6 +3,7 @@ package store
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,11 +16,11 @@ func TestSettingsPersistenceAndValidation(t *testing.T) {
 	if s.Settings() != DefaultSettings() {
 		t.Fatal(s.Settings())
 	}
-	want := Settings{AgentVolume: 250, AgentVoice: "ballad", BufferSeconds: 7, AutoReconnect: true, Quality: "low", Country: "GB"}
+	want := Settings{AgentLocalEnabled: true, AgentAutoLocation: false, AgentLocation: "Winchester, UK", AgentLocalSources: "https://www.winchester.gov.uk", AgentVolume: 250, AgentVoice: "ballad", BufferSeconds: 7, AutoReconnect: true, Quality: "low", Country: "GB"}
 	if err = s.SaveSettings(want); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []Settings{{BufferSeconds: 11, Quality: "auto"}, {BufferSeconds: -1, Quality: "auto"}, {Quality: "bad"}, {Quality: "auto", AgentVoice: "invalid"}, {Quality: "auto", AgentVolume: 24}, {Quality: "auto", AgentVolume: 401}} {
+	for _, bad := range []Settings{{Quality: "auto", AgentLocation: strings.Repeat("x", 201)}, {Quality: "auto", AgentLocalSources: "javascript:alert(1)"}, {BufferSeconds: 11, Quality: "auto"}, {BufferSeconds: -1, Quality: "auto"}, {Quality: "bad"}, {Quality: "auto", AgentVoice: "invalid"}, {Quality: "auto", AgentVolume: 24}, {Quality: "auto", AgentVolume: 401}} {
 		if err = s.SaveSettings(bad); err == nil {
 			t.Fatal("invalid setting accepted")
 		}

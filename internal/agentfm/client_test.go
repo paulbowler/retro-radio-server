@@ -92,7 +92,7 @@ func TestInvalidChoiceAndSpeechFailure(t *testing.T) {
 				case "empty-chat":
 					choice["chat"] = ""
 				case "long-chat":
-					choice["chat"] = strings.Repeat("word ", 70)
+					choice["chat"] = strings.Repeat("word ", 120)
 				case "incomplete":
 					status = "incomplete"
 				}

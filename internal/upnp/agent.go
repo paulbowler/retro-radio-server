@@ -143,8 +143,15 @@ func convertAgentAudio(parent context.Context, path, format string, source io.Re
 }
 
 type agentLink struct {
-	index int
-	path  string
+	index        int
+	path         string
+	expires      time.Time
+	localStarted func()
+	localAllowed func() bool
+}
+
+func (a agentLink) playable(now time.Time) bool {
+	return a.path != "" && (a.expires.IsZero() || now.Before(a.expires)) && (a.localAllowed == nil || a.localAllowed())
 }
 
 func (a agentLink) remove() {
@@ -220,6 +227,8 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 			return
 		}
 		job.link.path = file.Name()
+		job.link.expires = segment.Expires
+		job.link.localStarted, job.link.localAllowed = segment.LocalStarted, segment.LocalAllowed
 		keep = true
 	}()
 	return job
