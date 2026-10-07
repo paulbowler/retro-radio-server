@@ -100,12 +100,29 @@ func (a *agentAudio) Close() error {
 
 // Every input is decoded to one PCM profile; only the final programme is encoded.
 func convertAgentAudio(parent context.Context, path, format string, source io.ReadCloser, encode bool) (io.ReadCloser, error) {
+	return convertAgentAudioFiltered(parent, path, format, source, encode, "")
+}
+
+// Level only downloaded speech, before caching and before the saved volume.
+// A raw gain cannot make quiet syllables competitive with mastered music once
+// occasional speech peaks approach full scale. Compress first, then loudness-
+// level that result; never normalize the music or the final mixed programme.
+const agentSpeechFilter = "acompressor=threshold=0.0316:ratio=3:attack=5:release=100:makeup=1,loudnorm=I=-14:TP=-2:LRA=7"
+
+func convertAgentSpeech(parent context.Context, path string, source io.ReadCloser) (io.ReadCloser, error) {
+	return convertAgentAudioFiltered(parent, path, "mp3", source, false, agentSpeechFilter)
+}
+
+func convertAgentAudioFiltered(parent context.Context, path, format string, source io.ReadCloser, encode bool, filter string) (io.ReadCloser, error) {
 	ctx, cancel := context.WithCancel(parent)
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "pipe", "-probesize", "32768", "-analyzeduration", "0", "-f", format}
 	if format == "f32le" {
 		args = append(args, "-ar", "44100", "-ac", "2")
 	}
 	args = append(args, "-i", "pipe:0", "-map", "0:a:0", "-vn", "-threads", "1", "-map_metadata", "-1", "-ar", "44100", "-ac", "2")
+	if filter != "" {
+		args = append(args, "-af", filter)
+	}
 	if encode {
 		args = append(args, "-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "0", "-write_xing", "0", "-f", "mp3")
 	} else {
@@ -228,7 +245,7 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 			return
 		}
 		// Cache decoded speech so handover needs neither an API call nor a decoder.
-		audio, e := convertAgentAudio(ctx, q.ffmpeg, "mp3", io.NopCloser(bytes.NewReader(segment.Audio)), false)
+		audio, e := convertAgentSpeech(ctx, q.ffmpeg, io.NopCloser(bytes.NewReader(segment.Audio)))
 		if e != nil {
 			log.Print("Agent FM: speech conversion failed; continuing music")
 			return

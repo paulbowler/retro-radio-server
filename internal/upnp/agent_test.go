@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -119,6 +120,16 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 				t.Fatal(err)
 			}
 			m.agentFFmpeg = ffmpeg
+			// Keep the virtual listener bounded but paced: an unpaced sink can
+			// consume a short song before even a local speech decoder starts.
+			m.queueWait = func(ctx context.Context, _ time.Duration) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(10 * time.Millisecond):
+					return nil
+				}
+			}
 			calls := 0
 			m.agent = agentServiceFunc(func(_ context.Context, current agentfm.Track, c []agentfm.Track) (agentfm.Segment, error) {
 				calls++
@@ -498,4 +509,106 @@ func TestAgentProgrammeMemoryBoundedAndIsolated(t *testing.T) {
 	if len([]rune(q.recentLinks()[agentfm.MaxRecentLinks-1])) != agentfm.MaxLinkChars {
 		t.Fatal("unbounded script")
 	}
+}
+
+// A steady sine proves multiplication, but misses soft syllables and loud
+// transients. Exercise that dynamic range through the real speech cache filter,
+// saved settings callback, programme encoder and MP3 decoder.
+func TestAgentSpeechLevellingAndSavedGainThroughMP3(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("FFmpeg integration runs in CI")
+	}
+	const seconds = 12
+	pcm := make([]byte, seconds*agentPCMSecond)
+	for frame := 0; frame < seconds*agentPCMRate; frame++ {
+		phase := float64(frame%agentPCMRate) / agentPCMRate
+		level := .006
+		switch {
+		case phase < .10 || phase > .90:
+			level = 0
+		case phase > .55 && phase < .70:
+			level = .15
+		case phase > .70:
+			level = .012
+		}
+		time := float64(frame) / agentPCMRate
+		v := float32(level * (.7*math.Sin(2*math.Pi*240*time) + .3*math.Sin(2*math.Pi*1100*time)))
+		for channel := 0; channel < 2; channel++ {
+			binary.LittleEndian.PutUint32(pcm[frame*agentPCMFrame+4*channel:], math.Float32bits(v))
+		}
+	}
+	encode := func(source []byte) []byte {
+		t.Helper()
+		r, err := convertAgentAudio(context.Background(), ffmpeg, "f32le", io.NopCloser(bytes.NewReader(source)), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		result, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	var prepared [][]byte
+	for _, sourceGain := range []float64{.1, 1} {
+		source := make([]byte, len(pcm))
+		for i := 0; i < len(pcm); i += 4 {
+			v := math.Float32frombits(binary.LittleEndian.Uint32(pcm[i:]))
+			binary.LittleEndian.PutUint32(source[i:], math.Float32bits(float32(float64(v)*sourceGain)))
+		}
+		mp3 := encode(source)
+		r, err := convertAgentSpeech(context.Background(), ffmpeg, io.NopCloser(bytes.NewReader(mp3)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		levelled, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(levelled) < (seconds-1)*agentPCMSecond || len(levelled) > maxAgentSpeechPCM {
+			t.Fatal("speech duration changed", len(levelled))
+		}
+		if ratio := agentTestRMS(levelled) / agentTestRMS(source); ratio < 2 {
+			t.Fatal("quiet speech not brought up", sourceGain, ratio)
+		}
+		for i := 0; i < len(levelled); i += 4 {
+			if math.Abs(float64(math.Float32frombits(binary.LittleEndian.Uint32(levelled[i:])))) > .82 {
+				t.Fatal("speech levelling exceeded peak ceiling")
+			}
+		}
+		prepared = append(prepared, levelled)
+		t.Log("source gain", sourceGain, "levelled RMS", agentTestRMS(levelled))
+	}
+	// A 20 dB source-level difference must not remain a 20 dB voice difference.
+	if ratio := agentTestRMS(prepared[1]) / agentTestRMS(prepared[0]); ratio < .5 || ratio > 2 {
+		t.Fatal("speech baseline still depends on source volume", ratio)
+	}
+	db, err := store.Open(filepath.Join(t.TempDir(), "speech.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DB.Close()
+	q := &musicQueue{volume: func() int { return db.Settings().AgentVolume }}
+	var rms []float64
+	for _, volume := range []int{25, 100, 400} {
+		settings := store.DefaultSettings()
+		settings.AgentVolume = volume
+		if err := db.SaveSettings(settings); err != nil {
+			t.Fatal(err)
+		}
+		var mixed bytes.Buffer
+		p := &agentProgram{sink: &mixed, timeline: &agentTimeline{}}
+		if err := p.transition(q, nil, prepared[1], content.Item{}); err != nil {
+			t.Fatal(err)
+		}
+		decoded := decodeAgentTestPCM(t, ffmpeg, encode(mixed.Bytes()))
+		rms = append(rms, agentTestRMS(decoded))
+	}
+	if rms[1]/rms[0] < 3.5 || rms[2]/rms[1] < 1.5 {
+		t.Fatal("saved slider ineffective after speech processing and MP3", rms)
+	}
+	t.Log("encoded RMS at 25%, 100%, 400%", rms)
 }

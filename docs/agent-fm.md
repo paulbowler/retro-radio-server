@@ -7,7 +7,7 @@ you do not have to open an album or choose a playlist first.
 The first track starts immediately after the library scan. While it plays,
 the server sends candidate track metadata and recent programme context to
 OpenAI's Responses API to choose the next track and write a DJ link, then
-sends the script to the Speech API. The downloaded voice is decoded into a
+sends the script to the Speech API. The downloaded voice is compressed and loudness-levelled, then decoded into a
 private temporary PCM cache. Music and speech pass through one continuous MP3
 encoder: the DJ overlaps the last three seconds of the song where possible,
 with the music ducked, and the chosen next track follows without a new stream.
@@ -277,8 +277,18 @@ longer intentional silence is not removed in full. Source stalls, missing next
 tracks or incomplete online preparation can still affect playback. Decoder pipes
 and the five-second tail bound memory; no whole album is cached.
 
-The saved DJ volume scales the actual speech PCM samples, immediately before
-mixing. At non-clipping levels 400% is four times the amplitude of 100%; 25% is
+Downloaded speech first passes through a gentle compressor (3:1, -30 dBFS
+threshold, 5 ms attack, 100 ms release) and FFmpeg's EBU R128 loudness levelling
+with a -14 LUFS target, -2 dBTP ceiling and 7 LU loudness range. This happens
+while preparing the private speech cache, never at handover. Quiet syllables
+are brought up rather than relying on a few loud peaks. Different voices and
+API output levels start from a consistent baseline; music is not levelled.
+
+The saved DJ volume then scales those levelled speech PCM samples, immediately
+before mixing. **100% now means the levelled voice, not the original API
+recording.** After upgrading, start at 100% and adjust to taste; an existing
+400% setting is preserved and can be much louder than before. At non-clipping
+levels 400% is four times the amplitude of 100%; 25% is
 one quarter. Music is unchanged apart from the deliberate ducking during speech.
 The final mix is peak-clamped to prevent overload. There is no automatic loudness
 normalization after the gain that could undo it. Changes can affect speech already
@@ -376,3 +386,19 @@ Links with a local item follow: previous song → brief attributed local update 
 next track introduction (55–100 words). Other links remain music-only (30–65
 words). The continuous encoder, three-second overlap and voice-volume control
 are unchanged. Music continues if research is unavailable.
+
+### Voice loudness investigation (October 2026)
+
+A bounded capture from the running server, with its saved volume and logs both
+showing 400%, measured a music excerpt at -8.87 LUFS and the spoken excerpt at
+-13.84 LUFS. The speech true peak was already -0.72 dBTP. This demonstrated a
+roughly 5 LU balance deficit with little peak headroom, despite the multiplier
+being applied. Tone-only gain tests did not cover that speech dynamic range.
+The speech-only processing above addresses this; it does not increase the
+slider's range or change the continuous programme encoder.
+
+Regression tests now also exercise speech-like quiet syllables, pauses and
+loud peaks at different source levels, and measure the actual encoded output
+at saved 25%, 100% and 400%. Music-only decoding remains unchanged. Real radio
+listening after deployment is still required; a single captured link is not a
+measurement of every voice or album.
