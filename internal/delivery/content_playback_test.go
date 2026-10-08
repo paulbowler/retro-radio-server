@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/model"
+	"retroradio.local/server/internal/store"
 	"strings"
 	"testing"
 	"time"
@@ -110,5 +112,25 @@ func TestMusicClientReleaseKeepsEstimateButUpstreamFailureClears(t *testing.T) {
 	finish(false)
 	if len(relay.Active()) != 0 {
 		t.Fatal("web release assigned to radio")
+	}
+}
+
+func TestMaintenanceClearsBufferedPlaybackEstimates(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "reset.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DB.Close()
+	d, _ := db.Seen("reset-radio", "pure", "", "192.168.1.3")
+	relay := New(db)
+	req := httptest.NewRequest("GET", "/stream/upnp/test?radio="+d.ID, nil)
+	play := content.Playback{Item: content.Item{Title: "Old track", Duration: "0:10:00", PlaybackID: "old", ArtURL: "http://music/cover"}, Resource: content.Resource{Codec: "MP3"}}
+	relay.TrackMusic(req, play)(true)
+	if len(relay.Active()) != 1 {
+		t.Fatal("fixture did not retain buffered estimate")
+	}
+	relay.ClearPlaybackState()
+	if len(relay.Active()) != 0 {
+		t.Fatal("stale status remained after reset")
 	}
 }

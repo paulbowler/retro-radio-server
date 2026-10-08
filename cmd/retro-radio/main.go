@@ -12,6 +12,7 @@ import (
 	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/maintenance"
 	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/protocol/frontierxml"
 	"retroradio.local/server/internal/store"
@@ -63,6 +64,7 @@ func main() {
 		log.Fatal(e)
 	}
 	defer s.DB.Close()
+	gate := &maintenance.Gate{}
 	relay := delivery.New(s)
 	cat := catalogue.New(s)
 	if mirror := os.Getenv("RETRO_CATALOGUE_URL"); mirror != "" {
@@ -72,10 +74,12 @@ func main() {
 		cat.Mirrors = []string{mirror}
 	}
 	podcasts := podcast.New(s)
+	podcasts.Maintenance = gate
 	music, e := upnp.NewManager(os.Getenv("RETRO_MUSIC_SERVER_URL"))
 	if e != nil {
 		log.Printf("Manual music configuration ignored; automatic discovery enabled: %v", e)
 	}
+	music.Maintenance = gate
 	if err := music.SetAgentHistory(s); err != nil {
 		log.Fatal(err)
 	}
@@ -83,6 +87,7 @@ func main() {
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
 	music.AgentVolume = func() int { return s.Settings().AgentVolume }
 	music.UseDiscoveryFile(os.Getenv("RETRO_UPNP_DISCOVERY_FILE"))
+	var resetAgentCaches func() error
 	var localStatus func() string
 	var localReset func()
 	var localItems func() []agentfm.LocalItem
@@ -93,6 +98,7 @@ func main() {
 		}, Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})
 		if client != nil {
 			music.SetAgentFM(client)
+			resetAgentCaches = client.ResetDerivedCaches
 			localStatus, localItems = client.LocalStatus, client.LocalItems
 			localReset = client.LocalSettingsChanged
 		}
@@ -101,7 +107,21 @@ func main() {
 		}
 	}
 
-	app := &web.App{AgentLocalReset: localReset, AgentLocalStatus: localStatus, AgentLocalItems: localItems, AgentVoiceDefault: env("RETRO_AGENT_VOICE", "ballad"), Music: music, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
+	app := &web.App{Development: os.Getenv("RETRO_DEVELOPMENT") == "true", Maintenance: gate, AgentLocalReset: localReset, AgentLocalStatus: localStatus, AgentLocalItems: localItems, AgentVoiceDefault: env("RETRO_AGENT_VOICE", "ballad"), Music: music, Podcasts: podcasts, Catalogue: cat, Store: s, Relay: relay, Base: base, User: env("RETRO_ADMIN_USER", "admin"), Password: os.Getenv("RETRO_ADMIN_PASSWORD")}
+	app.RebuildSources = func(ctx context.Context) []string {
+		var warnings []string
+		if resetAgentCaches != nil {
+			if err := resetAgentCaches(); err != nil {
+				log.Printf("Development speech cache reset: %v", err)
+				warnings = append(warnings, "Some stored station welcomes could not be removed.")
+			}
+		}
+		warnings = append(warnings, music.Rebuild(ctx)...)
+		if _, err := cat.SearchFiltered(ctx, "", s.Settings().Country, "", 0); err != nil {
+			warnings = append(warnings, "Radio catalogue unavailable; browsing will retry.")
+		}
+		return warnings
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/setupapp/", &frontierxml.Handler{Store: s, Base: base, Music: music, SupportsHTTPS: os.Getenv("RETRO_RADIO_HTTPS") == "true"})
 	mux.Handle("/stream/", relay)
@@ -121,7 +141,7 @@ func main() {
 		w.Header().Set("Content-Type", "text/plain")
 		w.Write([]byte("ok\n"))
 	})
-	srv := &http.Server{Addr: env("RETRO_LISTEN", ":8080"), Handler: mux, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
+	srv := &http.Server{Addr: env("RETRO_LISTEN", ":8080"), Handler: gate.Handler(mux), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go podcasts.Run(ctx)

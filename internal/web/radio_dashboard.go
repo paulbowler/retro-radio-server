@@ -123,9 +123,9 @@ func (a *App) refreshArtwork(key string, s model.Station) {
 	}
 	a.artworkPending[key] = true
 	a.artworkMu.Unlock()
-	go func() {
+	if !a.background(context.Background(), func(parent context.Context) {
 		defer func() { a.artworkMu.Lock(); delete(a.artworkPending, key); a.artworkMu.Unlock() }()
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 8*time.Second)
 		defer cancel()
 		cached, err := a.fetchArtwork(ctx, s)
 		if err != nil {
@@ -137,7 +137,11 @@ func (a *App) refreshArtwork(key string, s model.Station) {
 			cached.RetryAfter = time.Now().Add(15 * time.Minute)
 		}
 		_ = a.Store.SaveArtwork(key, cached)
-	}()
+	}) {
+		a.artworkMu.Lock()
+		delete(a.artworkPending, key)
+		a.artworkMu.Unlock()
+	}
 }
 func (a *App) fetchArtwork(ctx context.Context, s model.Station) (store.Artwork, error) {
 	if s.Favicon == "" {

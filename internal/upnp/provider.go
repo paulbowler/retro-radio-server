@@ -206,8 +206,19 @@ func (p *Provider) browse(ctx context.Context, object, flag string, offset, coun
 		return content.Page{}, errors.New("inconsistent UPnP page counts")
 	}
 	for i := range items {
-		if items[i].Kind == content.PlayableItem {
+		if items[i].ArtURL != "" {
+			if art, err := p.description.Parse(items[i].ArtURL); err == nil && p.scope.check(art.String()) == nil {
+				items[i].ArtURL = art.String()
+			} else {
+				items[i].ArtURL = ""
+			}
+		}
+		// Album containers also need an opaque artwork address, without becoming
+		// playable. Resolve still verifies that its target is an audio item.
+		if items[i].Kind == content.PlayableItem || items[i].ArtURL != "" {
 			items[i].PlaybackID = p.register(items[i].ID)
+		}
+		if items[i].Kind == content.PlayableItem {
 			if resource, e := p.SelectResource(items[i].Resources, model.LegacyXML); e == nil {
 				items[i].PlaybackCodec = resource.Codec
 				if resource.Codec == "FLAC" {
@@ -239,6 +250,14 @@ func (p *Provider) Browse(ctx context.Context, object string, offset, count int)
 		page.ParentID = metadata.Items[0].ParentID
 		page.Title = metadata.Items[0].Title
 		page.Genre = metadata.Items[0].Genre
+		for i := range page.Items {
+			if page.Items[i].ArtURL == "" {
+				page.Items[i].ArtURL = metadata.Items[0].ArtURL
+				if page.Items[i].ArtURL != "" && page.Items[i].PlaybackID == "" {
+					page.Items[i].PlaybackID = p.register(page.Items[i].ID)
+				}
+			}
+		}
 		// MinimServer uses ordinary containers for individual genre values.
 		// Identify them by their parent index, never by a track or album name.
 		if !page.Genre && page.ParentID != "" && page.ParentID != "-1" && page.ParentID != "0" {
@@ -289,6 +308,17 @@ func (p *Provider) register(object string) string {
 	return id
 }
 func (p *Provider) Metadata(ctx context.Context, id string) (content.Item, error) {
+	item, err := p.artworkMetadata(ctx, id)
+	if err != nil {
+		return item, err
+	}
+	if item.Kind != content.PlayableItem {
+		return content.Item{}, errors.New("music item no longer available")
+	}
+	return item, nil
+}
+
+func (p *Provider) artworkMetadata(ctx context.Context, id string) (content.Item, error) {
 	p.mu.Lock()
 	t, ok := p.tokens[id]
 	p.mu.Unlock()
@@ -299,10 +329,17 @@ func (p *Provider) Metadata(ctx context.Context, id string) (content.Item, error
 	if e != nil {
 		return content.Item{}, e
 	}
-	if len(page.Items) != 1 || page.Items[0].ID != t.object || page.Items[0].Kind != content.PlayableItem {
+	if len(page.Items) != 1 || page.Items[0].ID != t.object {
 		return content.Item{}, errors.New("music item no longer available")
 	}
-	return page.Items[0], nil
+	item := page.Items[0]
+	if item.ArtURL == "" && item.ParentID != "" && item.ParentID != "-1" && item.ParentID != item.ID {
+		parent, err := p.browse(ctx, item.ParentID, "BrowseMetadata", 0, 1)
+		if err == nil && len(parent.Items) == 1 && parent.Items[0].ID == item.ParentID && parent.Items[0].Kind == content.Folder {
+			item.ArtURL = parent.Items[0].ArtURL
+		}
+	}
+	return item, nil
 }
 func (p *Provider) Resolve(ctx context.Context, id string, caps model.Capabilities) (content.Playback, error) {
 	item, e := p.Metadata(ctx, id)

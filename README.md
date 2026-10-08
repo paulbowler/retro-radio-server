@@ -214,3 +214,13 @@ online AI choose music from your UPnP servers and prepare natural spoken links
 between tracks. Set `RETRO_AGENT_FM=true` and `OPENAI_API_KEY` in the server's
 `.env`, then rebuild. See [Agent FM setup and radio testing](docs/agent-fm.md)
 for voice settings, costs, fallback behaviour and the initial library limits.
+
+## Development database rebuild
+
+For schema/ingestion experiments, set `RETRO_DEVELOPMENT=true`, restart, and open
+the settings cog → **Development: rebuild database…**. This destructive operation
+stops listening and deletes saved development library/radio data, builds a fresh
+database through current migrations, and refreshes normal sources. App settings,
+secrets and feed subscriptions remain; a private backup is kept. See
+[the rebuild guide](docs/development-rebuild.md) for exact scope, recovery and the
+playback/artwork findings. Leave the feature disabled in production.

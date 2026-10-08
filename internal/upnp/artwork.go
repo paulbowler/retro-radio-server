@@ -32,7 +32,7 @@ func (p *Provider) ServeArtwork(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 	defer cancel()
-	item, e := p.Metadata(ctx, id)
+	item, e := p.artworkMetadata(ctx, id)
 	if e != nil || item.ArtURL == "" {
 		http.NotFound(w, r)
 		return

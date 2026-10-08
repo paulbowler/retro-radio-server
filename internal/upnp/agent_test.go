@@ -723,3 +723,29 @@ func TestStationWelcomeFailure(t *testing.T) {
 		t.Fatal("failed welcome consumed session")
 	}
 }
+
+func TestInvalidAnnouncedIndexCannotEmitSpeechForFallback(t *testing.T) {
+	q := &musicQueue{ffmpeg: fakeAgentFFmpeg(t), agent: agentServiceFunc(func(context.Context, agentfm.Track, []agentfm.Track) (agentfm.Segment, error) {
+		return agentfm.Segment{Index: 7, Text: "Wrong song", Audio: agentTestSamples(10, .1)}, nil
+	})}
+	job := prepareAgentLink(context.Background(), q, content.Item{}, []content.Item{{Title: "Actual song"}})
+	<-job.done
+	defer job.close()
+	if link := job.ready(); link.path != "" || link.text != "" {
+		t.Fatal("invalid choice emitted speech", link)
+	}
+}
+func TestChangedNASIdentityRejectedBeforeAnnouncement(t *testing.T) {
+	m, folder := queueFixture(t, 2, "tracks")
+	tracks, err := m.TrackList(context.Background(), folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := tracks[0]
+	old.Title = "Stale title promised by DJ"
+	q := &musicQueue{caps: model.LegacyXML, ffmpeg: fakeAgentFFmpeg(t)}
+	if _, audio, err := m.openAgentTrack(context.Background(), q, old); err == nil {
+		audio.Close()
+		t.Fatal("stale metadata played")
+	}
+}

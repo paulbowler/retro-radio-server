@@ -38,7 +38,7 @@ func (a *App) preferences(w http.ResponseWriter, r *http.Request) {
 	if a.AgentLocalItems != nil {
 		items = a.AgentLocalItems()
 	}
-	render(w, "preferences-form", view{AgentLocalStatus: localStatus, LocalBulletins: items, Settings: settings, Countries: countryOptions, AgentVoiceGroups: groups})
+	render(w, "preferences-form", view{Development: a.Development && a.Maintenance != nil, AgentLocalStatus: localStatus, LocalBulletins: items, Settings: settings, Countries: countryOptions, AgentVoiceGroups: groups})
 }
 func (a *App) savePreferences(w http.ResponseWriter, r *http.Request) {
 	if !a.form(w, r) {

@@ -295,6 +295,16 @@ func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p 
 		next := candidates[link.index]
 		primed = future.take(next.PlaybackID)
 		future.close()
+		// Commit the choice only once its actual decoder is ready. Previously a
+		// failed or late prime allowed speech to promise an unopened NAS resource.
+		if primed == nil {
+			nextPlay, nextAudio, openErr := m.openAgentTrack(ctx, q, next)
+			if openErr != nil {
+				job.close()
+				return openErr
+			}
+			primed = &primedAgentTrack{id: next.PlaybackID, play: nextPlay, audio: nextAudio}
+		}
 		var speech []byte
 		if link.playable(time.Now()) {
 			speech, err = os.ReadFile(link.path)

@@ -344,3 +344,13 @@ func audioContent(ct string) bool {
 	}
 	return strings.HasPrefix(ct, "audio/") || ct == "application/octet-stream"
 }
+
+// ClearPlaybackState is called only after maintenance has drained every stream.
+// Finite/range music transfers otherwise retain duration estimates after their
+// connection closes, including references to invalidated artwork tokens.
+func (p *Relay) ClearPlaybackState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.active = map[uint64]Active{}
+	p.Client.CloseIdleConnections()
+}

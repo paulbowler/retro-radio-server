@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/maintenance"
 	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/store"
 	"strings"
@@ -29,12 +30,13 @@ type cached struct {
 	At      time.Time
 }
 type Service struct {
-	Store     *store.Store
-	Client    *http.Client
-	SearchURL string
-	mu        sync.Mutex
-	refresh   sync.Mutex
-	cache     map[string]cached
+	Maintenance *maintenance.Gate
+	Store       *store.Store
+	Client      *http.Client
+	SearchURL   string
+	mu          sync.Mutex
+	refresh     sync.Mutex
+	cache       map[string]cached
 }
 
 func New(s *store.Store) *Service {
@@ -167,7 +169,7 @@ func (s *Service) Refresh(ctx context.Context) {
 	}
 }
 func (s *Service) Run(ctx context.Context) {
-	s.Refresh(ctx)
+	s.runRefresh(ctx)
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
 	for {
@@ -175,7 +177,17 @@ func (s *Service) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			s.Refresh(ctx)
+			s.runRefresh(ctx)
 		}
 	}
 }
+
+func (s *Service) runRefresh(ctx context.Context) {
+	if s.Maintenance == nil {
+		s.Refresh(ctx)
+		return
+	}
+	s.Maintenance.Do(ctx, s.Refresh)
+}
+
+func (s *Service) ClearSearchCache() { s.mu.Lock(); defer s.mu.Unlock(); s.cache = map[string]cached{} }

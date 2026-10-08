@@ -16,6 +16,7 @@ import (
 	"retroradio.local/server/internal/catalogue"
 	"retroradio.local/server/internal/content"
 	"retroradio.local/server/internal/delivery"
+	"retroradio.local/server/internal/maintenance"
 	"retroradio.local/server/internal/model"
 	"retroradio.local/server/internal/podcast"
 	"retroradio.local/server/internal/store"
@@ -50,6 +51,10 @@ var page = template.Must(template.New("dashboard.html").Funcs(template.FuncMap{
 }).ParseFS(assets, "dashboard.html"))
 
 type App struct {
+	Development          bool
+	Maintenance          *maintenance.Gate
+	RebuildSources       func(context.Context) []string
+	rebuildToken         string
 	AgentVoiceDefault    string
 	AgentLocalStatus     func() string
 	AgentLocalItems      func() []agentfm.LocalItem
@@ -137,6 +142,7 @@ type voiceGroup struct {
 }
 
 type view struct {
+	Development                                 bool
 	AgentVoiceGroups                            []voiceGroup
 	AgentLocalStatus                            string
 	LocalBulletins                              []agentfm.LocalItem
@@ -216,6 +222,11 @@ func (a *App) Handler() http.Handler {
 		a.ArtworkClient = delivery.NewClient()
 	}
 	mux := http.NewServeMux()
+	if a.Development && a.Maintenance != nil {
+		a.rebuildToken = randomRebuildToken()
+		mux.HandleFunc("GET /development/rebuild", a.rebuildPage)
+		mux.HandleFunc("POST /development/rebuild", a.rebuildDatabase)
+	}
 	mux.Handle("GET /static/", http.FileServer(http.FS(assets)))
 	mux.HandleFunc("GET /", a.screen)
 	mux.HandleFunc("GET /preferences", a.preferences)

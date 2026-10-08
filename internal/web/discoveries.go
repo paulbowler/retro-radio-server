@@ -105,7 +105,11 @@ func (a *App) discoveries(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		job = &discoveryJob{started: time.Now(), country: country, offset: offset, cancel: cancel, loading: true, done: make(chan struct{})}
 		a.discoveriesJobs[key] = job
-		go a.findDiscoveries(ctx, job)
+		if !a.background(ctx, func(ctx context.Context) { a.findDiscoveries(ctx, job) }) {
+			job.cancel()
+			job.loading = false
+			close(job.done)
+		}
 	}
 	a.discoveriesMu.Unlock()
 	job.mu.Lock()

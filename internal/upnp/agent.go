@@ -242,9 +242,11 @@ func prepareAgentLink(parent context.Context, q *musicQueue, current content.Ite
 			}
 		}
 		segment, e := q.agent.Prepare(ctx, present, candidates)
-		if segment.Index >= 0 && segment.Index < len(remaining) {
-			job.link.index = segment.Index
+		if segment.Index < 0 || segment.Index >= len(remaining) {
+			log.Print("Agent FM: invalid announced track index; continuing without speech")
+			return
 		}
+		job.link.index = segment.Index
 		if e != nil {
 			if ctx.Err() == nil {
 				log.Printf("Agent FM: %v; continuing music", e)
@@ -305,6 +307,12 @@ func (m *Manager) openAgentTrack(ctx context.Context, q *musicQueue, item conten
 	play, source, _, err := m.openQueueTrack(ctx, item.PlaybackID, q.caps)
 	if err != nil {
 		return play, nil, err
+	}
+	// The queue snapshot is what the presenter was given. A NAS rescan can
+	// reuse object IDs; never announce the snapshot and play changed metadata.
+	if play.Item.Title != item.Title || play.Item.Artist != item.Artist || play.Item.Album != item.Album || agentTrackKey(play.Item) != agentTrackKey(item) {
+		source.Close()
+		return play, nil, errors.New("music metadata changed; reopen the station")
 	}
 	format := "mp3"
 	if play.Codec() == "AAC" {

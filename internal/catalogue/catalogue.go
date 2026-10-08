@@ -427,3 +427,6 @@ func artworkPublisher(raw string) string {
 	}
 	return strings.Join(labels[len(labels)-n:], ".")
 }
+
+// ClearDiscoveryCache forgets discovered mirrors; configured mirrors remain.
+func (s *Service) ClearDiscoveryCache() { s.mu.Lock(); defer s.mu.Unlock(); s.discovered = nil }

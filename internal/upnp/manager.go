@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"retroradio.local/server/internal/agentfm"
 	"retroradio.local/server/internal/content"
+	"retroradio.local/server/internal/maintenance"
 	"retroradio.local/server/internal/model"
 	"sort"
 	"strings"
@@ -27,6 +28,7 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
+	Maintenance      *maintenance.Gate
 	agentHistory     musicHistoryStore
 	agentLastPlay    map[string]time.Time
 	AgentVolume      func() int // Saved speech volume, applied after speech levelling while mixing.
@@ -96,7 +98,7 @@ func (m *Manager) Rediscover() {
 	}
 }
 func (m *Manager) Run(ctx context.Context) {
-	m.Refresh(ctx)
+	m.runRefresh(ctx)
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -106,7 +108,7 @@ func (m *Manager) Run(ctx context.Context) {
 		case <-ticker.C:
 		case <-m.refresh:
 		}
-		m.Refresh(ctx)
+		m.runRefresh(ctx)
 	}
 }
 func (m *Manager) Refresh(parent context.Context) {
@@ -308,4 +310,12 @@ func (m *Manager) SetPlaybackObserver(observer func(*http.Request, content.Playb
 	for _, s := range m.snapshot() {
 		s.provider.PlaybackObserver = observer
 	}
+}
+
+func (m *Manager) runRefresh(ctx context.Context) {
+	if m.Maintenance == nil {
+		m.Refresh(ctx)
+		return
+	}
+	m.Maintenance.Do(ctx, m.Refresh)
 }
