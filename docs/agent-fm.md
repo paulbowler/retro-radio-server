@@ -372,6 +372,22 @@ core title of the current song, then introduces the next track. Because the link
 starts over the song's tail, the DJ uses wording such as “That's …” rather than
 claiming that the song has already ended.
 
+Track identification is inserted by the app from the current playback snapshot
+and the validated next candidate. The online presenter supplies placeholders
+and the editorial bridge, rather than writing either identity. Listening history
+and previous scripts cannot substitute for the song currently playing. A malformed
+script falls back to a brief metadata-only identification; an omitted local update
+is not marked as broadcast. Technical title annotations are removed while genuine
+parenthetical title words are retained. Performer corrections remain possible through separate fields when the presenter
+is highly confident that the artist tag names the composer and can identify this
+recording's actual performer. Familiarity alone is insufficient to replace a cover
+performer. These credit corrections are model judgments and still need listening
+checks; they cannot change the current or next recording's title.
+
+Earlier versions checked the selected candidate and script length but allowed the
+model to write an unchecked previous-track name (with performer corrections mixed into the same free text). A database rebuild does not fix that generation error. After deploying
+this change, start a new station session; no database refresh is required.
+
 After rebuilding, open **Settings**, enable **Occasional local news, weather and
 events**, enter **Winchester, UK** under **Your locality**, and Save. This saved
 override is shared by Pure, browser and genre sessions and survives restarts.

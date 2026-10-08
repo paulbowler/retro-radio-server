@@ -39,7 +39,7 @@ func TestOnlineChoiceAndSpeech(t *testing.T) {
 			}
 			fmt.Fprint(w, `{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"index\":1,\"chat\":\"Next artist, with Next song.\"}"}]}]}`)
 		case "/audio/speech":
-			if p["voice"] != expectedVoice || p["response_format"] != "mp3" || p["input"] != "Next artist, with Next song." || !strings.Contains(p["instructions"].(string), "British") {
+			if p["voice"] != expectedVoice || p["response_format"] != "mp3" || p["input"] != "That's Previous. Up next, Next artist with Next song." || !strings.Contains(p["instructions"].(string), "British") {
 				t.Error(p)
 			}
 			w.Write([]byte("downloaded-MP3"))
@@ -278,5 +278,116 @@ func TestStoredStationWelcomeSurvivesRestartAndVoiceChange(t *testing.T) {
 	}
 	if _, err := restarted.Intro(context.Background(), "Pop FM"); err != nil || calls != 2 {
 		t.Fatal("stations did not have separate welcomes", err, calls)
+	}
+}
+
+func TestSpokenIdentitiesFollowPlaybackInsteadOfPresenterMemory(t *testing.T) {
+	for _, tc := range []struct {
+		name, script string
+		history      bool
+	}{
+		{"opening transition", "{{previous_track}}. A change of pace. {{next_track}}.", false},
+		{"later transition", "{{previous_track}}. A change of pace. {{next_track}}.", true},
+		{"wrong previous name", "That's Stale Performer with Stale Song. Up next, Someone Else.", true},
+		{"reversed placeholders", "{{next_track}}. {{previous_track}}.", true},
+		{"duplicate previous", "{{previous_track}}. {{previous_track}}. {{next_track}}.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			current := Track{Title: "Don't You (Forget About Me) [FLAC 24bit 96kHz] (2009 Remaster)", Artist: "Actual Performer", Composer: "Different Writer"}
+			if tc.history {
+				current.Recent = []Track{{Title: "Stale Song", Artist: "Stale Performer"}}
+				current.RecentLinks = []string{"That's Stale Performer with Stale Song."}
+			}
+			c := New(Config{Key: "test"})
+			var spoken string
+			c.http.Transport = localTransport(func(r *http.Request) (*http.Response, error) {
+				var p map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+					t.Fatal(err)
+				}
+				if strings.HasSuffix(r.URL.Path, "/audio/speech") {
+					spoken = p["input"].(string)
+					return localHTTP("MP3"), nil
+				}
+				choice, _ := json.Marshal(map[string]any{"index": 1, "chat": tc.script})
+				response, _ := json.Marshal(map[string]any{"status": "completed", "output": []any{map[string]any{"type": "message", "content": []any{map[string]any{"type": "output_text", "text": string(choice)}}}}})
+				return localHTTP(string(response)), nil
+			})
+			s, err := c.Prepare(context.Background(), current, []Track{{Title: "Wrong candidate", Artist: "Wrong artist"}, {Title: "Selected Song", Artist: "Selected Performer"}})
+			if err != nil || s.Index != 1 || s.Text != spoken || string(s.Audio) != "MP3" {
+				t.Fatal(s, err, spoken)
+			}
+			if !strings.HasPrefix(spoken, "That's Actual Performer with Don't You (Forget About Me).") || !strings.HasSuffix(spoken, "Up next, Selected Performer with Selected Song.") {
+				t.Fatal(spoken)
+			}
+			for _, unwanted := range []string{"Stale", "Someone Else", "Different Writer", "FLAC", "Remaster", "{{"} {
+				if strings.Contains(spoken, unwanted) {
+					t.Fatal(spoken)
+				}
+			}
+		})
+	}
+}
+
+func TestTrackIdentityMissingTagsAndLiteralPlaceholders(t *testing.T) {
+	if got := trackIdentity(Track{Title: "Instrumental"}); got != "Instrumental" {
+		t.Fatal(got)
+	}
+	if got := trackIdentity(Track{Artist: "Performer"}); got != "Performer with an untitled track" {
+		t.Fatal(got)
+	}
+	got, valid := renderTrackLink("{{previous_track}}. {{next_track}}.", Track{Title: "{{next_track}}", Artist: "A"}, Track{Title: "Next", Artist: "B"})
+	if !valid || got != "That's A with {{next_track}}. Up next, B with Next." {
+		t.Fatal(got, valid)
+	}
+}
+
+func TestInvalidIdentityTemplateDoesNotMarkLocalUpdateBroadcast(t *testing.T) {
+	cfg := LocalSettings{Enabled: true, Location: "Winchester, UK"}
+	c := New(Config{Key: "test", LocalSettings: func() LocalSettings { return cfg }})
+	now := time.Now()
+	c.local.key = localKey(cfg)
+	c.local.refreshAt = now.Add(time.Hour)
+	c.local.items = []LocalItem{{Kind: "news", Summary: "Local news", Interesting: true, URL: "https://council.test/news", Date: now.Format("2006-01-02"), expires: now.Add(time.Hour)}}
+	c.http.Transport = localTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/audio/speech") {
+			return localHTTP("MP3"), nil
+		}
+		return localHTTP(`{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"{\"index\":0,\"chat\":\"Wrong previous song, then local news.\"}"}]}]}`), nil
+	})
+	s, err := c.Prepare(context.Background(), Track{Title: "Current"}, []Track{{Title: "Next"}})
+	if err != nil || s.LocalStarted != nil || s.LocalAllowed != nil || !s.Expires.IsZero() || s.Text != "That's Current. Up next, Next." {
+		t.Fatal(s, err)
+	}
+}
+
+func TestComposerCreditCorrectionsKeepCurrentAndChosenTitles(t *testing.T) {
+	for _, valid := range []bool{true, false} {
+		t.Run(fmt.Sprint(valid), func(t *testing.T) {
+			c := New(Config{Key: "test"})
+			c.http.Transport = localTransport(func(r *http.Request) (*http.Response, error) {
+				if strings.HasSuffix(r.URL.Path, "/audio/speech") {
+					return localHTTP("MP3"), nil
+				}
+				chat := "{{previous_track}}. A different interpretation next. {{next_track}}."
+				if !valid {
+					chat = "That's an unrelated earlier song."
+				}
+				choice, _ := json.Marshal(map[string]any{"index": 1, "chat": chat, "previous_performer": "Recording Performer", "next_performer": "Next Recording Performer"})
+				response, _ := json.Marshal(map[string]any{"status": "completed", "output": []any{map[string]any{"type": "message", "content": []any{map[string]any{"type": "output_text", "text": string(choice)}}}}})
+				return localHTTP(string(response)), nil
+			})
+			s, err := c.Prepare(context.Background(), Track{Title: "Current Song", Artist: "Composer Tag", Composer: "Composer Tag"}, []Track{{Title: "Unselected Song"}, {Title: "Chosen Song", Artist: "Next Composer Tag", Composer: "Next Composer Tag"}})
+			if err != nil || s.Index != 1 {
+				t.Fatal(s, err)
+			}
+			previous, next := "Recording Performer", "Next Recording Performer"
+			if !valid {
+				previous, next = "Composer Tag", "Next Composer Tag"
+			}
+			if !strings.HasPrefix(s.Text, "That's "+previous+" with Current Song.") || !strings.HasSuffix(s.Text, "Up next, "+next+" with Chosen Song.") || strings.Contains(s.Text, "Unselected") {
+				t.Fatal(s.Text)
+			}
+		})
 	}
 }

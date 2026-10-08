@@ -177,10 +177,11 @@ func TestDJReceivesBackReferenceAndOnlyOccasionalLocalUpdate(t *testing.T) {
 		if hasLocal != (count == 1) {
 			t.Error("local update not occasional", count)
 		}
-		text := "That’s Previous Performer with Previous. Next Performer is up next."
+		text := "{{previous_track}}. "
 		if hasLocal {
 			text += " " + strings.Repeat("More local detail. ", 25)
 		}
+		text += "{{next_track}}."
 		choice, _ := json.Marshal(map[string]any{"index": 0, "chat": text})
 		result, _ := json.Marshal(map[string]any{"status": "completed", "output": []any{map[string]any{"type": "message", "content": []any{map[string]any{"type": "output_text", "text": string(choice)}}}}})
 		return localHTTP(string(result)), nil
