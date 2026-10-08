@@ -76,6 +76,9 @@ func main() {
 	if e != nil {
 		log.Printf("Manual music configuration ignored; automatic discovery enabled: %v", e)
 	}
+	if err := music.SetAgentHistory(s); err != nil {
+		log.Fatal(err)
+	}
 	music.SetPlaybackObserver(relay.TrackMusic)
 	music.SetTranscoding(os.Getenv("RETRO_MUSIC_TRANSCODE") != "false")
 	music.AgentVolume = func() int { return s.Settings().AgentVolume }

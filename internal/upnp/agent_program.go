@@ -428,7 +428,11 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 			if wait(ctx, time.Until(due)) != nil {
 				return
 			}
+			var startedTracks []content.Item
 			for _, cue := range timeline.ready(sent * agentPCMSecond / 16000) {
+				if cue.play != nil {
+					startedTracks = append(startedTracks, cue.play.Item)
+				}
 				if cue.end && finish != nil {
 					finish(true)
 					finish = nil
@@ -453,6 +457,9 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 			count, e := writer.Write(buffer[:n])
 			if e != nil || count != n {
 				return
+			}
+			for _, item := range startedTracks {
+				m.recordAgentPlay(item)
 			}
 			sent += int64(n)
 			_ = rc.Flush()

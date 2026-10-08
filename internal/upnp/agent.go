@@ -53,6 +53,16 @@ func (m *Manager) startAgentFM(ctx context.Context, folder, name string, caps mo
 		return content.Playback{}, "", e
 	}
 	rand.Shuffle(len(tracks), func(i, j int) { tracks[i], tracks[j] = tracks[j], tracks[i] })
+	opening := m.agentRotation(tracks)
+	if len(opening) > 0 {
+		chosen := opening[rand.Intn(len(opening))].PlaybackID
+		for i := range tracks {
+			if tracks[i].PlaybackID == chosen {
+				tracks[0], tracks[i] = tracks[i], tracks[0]
+				break
+			}
+		}
+	}
 	play, session, err := m.createQueue(ctx, tracks, caps, true)
 	if err == nil {
 		m.mu.Lock()
@@ -436,6 +446,9 @@ func agentCandidates(q *musicQueue, current content.Item) []content.Item {
 	list := collect(true)
 	if len(list) == 0 {
 		list = collect(false)
+	}
+	if q.rotation != nil {
+		list = q.rotation(list)
 	}
 	rand.Shuffle(len(list), func(i, j int) { list[i], list[j] = list[j], list[i] })
 	if len(list) > 100 {

@@ -668,6 +668,9 @@ func TestStationWelcomeFiniteThenContinuousProgramme(t *testing.T) {
 	// HEAD must neither generate nor consume the welcome.
 	head := httptest.NewRecorder()
 	m.ServeQueue(head, httptest.NewRequest("HEAD", "/stream/upnp-queue/"+id, nil))
+	if len(m.agentLastPlay) != 0 {
+		t.Fatal("HEAD recorded a song")
+	}
 	if calls != 0 || q.introDone {
 		t.Fatal("HEAD consumed welcome")
 	}
@@ -677,6 +680,9 @@ func TestStationWelcomeFiniteThenContinuousProgramme(t *testing.T) {
 	m.ServeQueue(first, request)
 	if first.Code != 200 || first.Header().Get("Content-Length") != fmt.Sprint(first.Body.Len()) || first.Header().Get("icy-metaint") != "" {
 		t.Fatal("welcome was not a finite MP3", first.Code, first.Header())
+	}
+	if len(m.agentLastPlay) != 0 {
+		t.Fatal("welcome recorded a song")
 	}
 	if calls != 1 || !q.introDone || len(q.recentLinks()) != 1 {
 		t.Fatal("welcome not completed", calls)
@@ -702,6 +708,9 @@ func TestStationWelcomeFiniteThenContinuousProgramme(t *testing.T) {
 	m.ServeQueue(cancelledAgentResponse{second, cancel}, httptest.NewRequest("GET", "/stream/upnp-queue/"+id, nil).WithContext(ctx))
 	if second.Code != 200 || second.Body.Len() < 32000 || second.Header().Get("Content-Length") != "" || calls != 1 {
 		t.Fatal("music did not remain a separate continuous programme", second.Code, calls, second.Header())
+	}
+	if len(m.agentLastPlay) != 1 || m.agentLastPlay[agentTrackKey(tracks[0])].IsZero() {
+		t.Fatal("actual music was not recorded", m.agentLastPlay)
 	}
 }
 

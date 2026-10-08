@@ -321,6 +321,25 @@ Retro Radio artwork remains unchanged.
 
 ## Curated selection and track introductions
 
+Agent FM remembers each recording's last playback in the existing database,
+shared across sessions, genre stations and web/radio listeners. Both the opening
+song and subsequent DJ candidate lists prefer songs not played in the last 24
+hours, including never-played songs. Choices remain shuffled and the DJ chooses
+among eligible candidates; this is not an oldest-first playlist. If a small
+collection has no tracks outside the window, selection relaxes to its less
+recently played half, still shuffled. The current song and the session's recent
+track exclusion remain in effect.
+
+History updates when music bytes are successfully sent at the song's start,
+not when browsing, selecting a station, rendering its welcome or preparing the
+next song. Partial listening therefore counts too. It survives server restarts
+and rebuilds without new configuration. Recordings are identified by a hash of
+their NAS resource URL (falling back to the server item ID), rather than the
+random playback token. Moving files or changing NAS URLs creates new identities.
+This history starts accumulating after deployment; earlier listening cannot be
+reconstructed. The rule applies within the station's sampled library, and very
+small collections will necessarily repeat more often.
+
 Agent FM and genre FM choose from shuffled candidates, rather than playing
 an album in order. The DJ considers musical continuity, contrast, duration and
 recent listening history, while avoiding consecutive performers/albums where

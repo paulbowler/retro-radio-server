@@ -40,7 +40,7 @@ func (s *Store) migrate() error {
 	if err := s.DB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 10 {
+	if version > 11 {
 		return fmt.Errorf("database schema %d is newer than this server", version)
 	}
 	if version >= 1 {
@@ -68,7 +68,10 @@ func (s *Store) migrate() error {
 		if err := s.migrateV9(); err != nil {
 			return err
 		}
-		return s.migrateV10()
+		if err := s.migrateV10(); err != nil {
+			return err
+		}
+		return s.migrateV11()
 	}
 	tx, err := s.DB.Begin()
 	if err != nil {
@@ -118,7 +121,10 @@ func (s *Store) migrate() error {
 	if err := s.migrateV9(); err != nil {
 		return err
 	}
-	return s.migrateV10()
+	if err := s.migrateV10(); err != nil {
+		return err
+	}
+	return s.migrateV11()
 }
 func (s *Store) Stations(search string) ([]model.Station, error) {
 	return s.stations(search, false)

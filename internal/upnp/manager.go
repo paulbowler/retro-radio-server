@@ -27,6 +27,8 @@ type musicServer struct {
 // Manager is the My Music root. Discovery runs independently of radio requests;
 // each discovered server retains its own pinned transport and opaque token registry.
 type Manager struct {
+	agentHistory     musicHistoryStore
+	agentLastPlay    map[string]time.Time
 	AgentVolume      func() int // Saved speech volume, applied after speech levelling while mixing.
 	agent            agentfm.Service
 	agentFFmpeg      string

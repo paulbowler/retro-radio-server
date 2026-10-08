@@ -25,6 +25,7 @@ const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
 	introDone bool
+	rotation  func([]content.Item) []content.Item
 
 	volume  func() int
 	name    string
@@ -155,6 +156,7 @@ func (m *Manager) createQueue(ctx context.Context, tracks []content.Item, caps m
 	}
 	q := &musicQueue{tracks: tracks, caps: caps, seen: now}
 	if agent {
+		q.rotation = m.agentRotation
 		q.volume = m.AgentVolume
 		q.agent, q.ffmpeg, q.name = m.agent, m.agentFFmpeg, "Agent FM"
 		play.Transcode = true
