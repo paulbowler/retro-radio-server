@@ -24,7 +24,9 @@ const maxQueueTracks = 1000
 const queueLifetime = 24 * time.Hour
 
 type musicQueue struct {
-	introAttempted bool
+	introPlayed bool
+	introAudio  []byte // Retain compressed greeting until a connection sends it fully.
+	introText   string
 
 	volume  func() int
 	name    string

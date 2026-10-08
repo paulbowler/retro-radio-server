@@ -8,11 +8,18 @@ After the library scan, each new Agent FM or genre FM session opens with
 “You're listening to Retro Radio. Welcome to [station name]. Good music,
 thoughtfully chosen. Let's begin.” The bracketed placeholder is replaced with
 Agent FM, Jazz FM or the chosen genre station name; brackets are not spoken.
-The opening uses the saved voice, speech levelling and saved DJ volume, followed
-by the first song in the same continuous stream. It makes one additional speech
-API request (no text-model call). Introduction preparation has an eight-second
-limit; failure starts music instead. Menu browsing and HEAD probes do not
-prepare greetings, and reconnecting to the same queue does not repeat one.
+The first song starts immediately after the library scan. After at least eight
+seconds of music, the welcome plays over a lowered music bed in the same continuous
+stream, using the saved voice, speech levelling and DJ volume. This gives the Pure
+time to establish playback before the greeting. It makes one additional speech
+API request (no text-model call), prepared while music plays with a twenty-second
+limit; failure leaves music playing. Menu browsing and HEAD probes do not
+prepare greetings, and a reconnect after the full greeting was sent does not repeat it.
+A connection cancelled during startup leaves the greeting pending: the next
+connection reuses its downloaded speech instead of skipping it or making another
+speech request. The completed flag follows the encoded output, not synthesis or
+PCM buffering. Server logs distinguish greeting-generation/conversion failures
+from `session introduction sent`.
 Selecting a station afresh creates a new queue and a new greeting.
 
 While the first track plays,

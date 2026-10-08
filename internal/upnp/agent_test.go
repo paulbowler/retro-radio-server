@@ -110,7 +110,7 @@ func TestAgentFMStreamChoiceSpeechMetadataAndStop(t *testing.T) {
 	if err != nil {
 		t.Skip("FFmpeg integration runs in CI")
 	}
-	music := generatedAgentTone(t, ffmpeg, "440", "8")
+	music := generatedAgentTone(t, ffmpeg, "440", "16")
 	speech := generatedAgentTone(t, ffmpeg, "880", "1")
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "speech", true: "API failure"}[fail], func(t *testing.T) {
@@ -622,66 +622,98 @@ func (s introAgentService) Intro(ctx context.Context, name string) (agentfm.Segm
 	return s.intro(ctx, name)
 }
 
-func TestSessionIntroductionOnceWithSavedVolumeAndFailureFallback(t *testing.T) {
+type pacedIntroSink struct{ bytes.Buffer }
+
+func (w *pacedIntroSink) Write(b []byte) (int, error) {
+	time.Sleep(time.Millisecond)
+	return w.Buffer.Write(b)
+}
+
+func TestSessionIntroductionMusicBedVolumeAndReconnect(t *testing.T) {
 	ffmpeg, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("FFmpeg integration runs in CI")
 	}
 	speech := generatedAgentTone(t, ffmpeg, "440", "2")
-	for _, fail := range []bool{false, true} {
-		t.Run(fmt.Sprint("failure=", fail), func(t *testing.T) {
-			calls := 0
-			q := &musicQueue{name: "Jazz FM", ffmpeg: ffmpeg, volume: func() int { return 25 }}
-			q.agent = introAgentService{intro: func(ctx context.Context, name string) (agentfm.Segment, error) {
-				calls++
-				if name != "Jazz FM" {
-					t.Error(name)
-				}
-				if fail {
-					return agentfm.Segment{}, errors.New("speech unavailable")
-				}
-				return agentfm.Segment{Text: "You're listening to Retro Radio.", Audio: speech}, nil
-			}}
-			var output bytes.Buffer
-			p := &agentProgram{sink: &output, timeline: &agentTimeline{}}
-			first := content.Item{Title: "First track"}
-			if err := p.intro(context.Background(), q, first); err != nil {
-				t.Fatal(err)
-			}
-			before := output.Len()
-			if err := p.intro(context.Background(), q, first); err != nil {
-				t.Fatal(err)
-			}
-			if calls != 1 || output.Len() != before {
-				t.Fatal("intro repeated on reconnect", calls)
-			}
-			if fail {
-				if output.Len() != 0 || len(q.recentLinks()) != 0 {
-					t.Fatal("failed intro entered programme or memory")
-				}
-				return
-			}
-			if output.Len() == 0 || len(q.recentLinks()) != 1 {
-				t.Fatal("greeting not played or remembered")
-			}
-			// The greeting must use the same levelled speech and saved gain as links.
-			r, err := convertAgentSpeech(context.Background(), ffmpeg, io.NopCloser(bytes.NewReader(speech)))
-			if err != nil {
-				t.Fatal(err)
-			}
-			pcm, err := io.ReadAll(r)
-			r.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := mixAgentPCM(nil, trimAgentSpeech(pcm), .25)
-			if !bytes.Equal(output.Bytes(), want) {
-				t.Fatal("intro bypassed saved voice volume or speech processing")
-			}
-			cues := p.timeline.ready(p.written)
-			if len(cues) == 0 || !strings.Contains(cues[0].title, "First track") {
-				t.Fatal("intro metadata did not identify first song", cues)
-			}
-		})
+	calls := 0
+	q := &musicQueue{name: "Jazz FM", ffmpeg: ffmpeg, volume: func() int { return 25 }}
+	q.agent = introAgentService{intro: func(ctx context.Context, name string) (agentfm.Segment, error) {
+		calls++
+		if name != "Jazz FM" {
+			t.Error(name)
+		}
+		return agentfm.Segment{Text: "You're listening to Retro Radio.", Audio: speech}, nil
+	}}
+	music := agentTestSamples(30*agentPCMRate, .1)
+	first := content.Item{Title: "First track"}
+	run := func() (*agentProgram, *pacedIntroSink) {
+		out := &pacedIntroSink{}
+		p := &agentProgram{sink: out, timeline: &agentTimeline{}}
+		if err := p.intro(context.Background(), q, first, bytes.NewReader(music)); err != nil {
+			t.Fatal(err)
+		}
+		return p, out
+	}
+	p, output := run()
+	if q.introPlayed || len(q.recentLinks()) != 0 {
+		t.Fatal("buffered greeting marked as sent")
+	}
+	cues := p.timeline.ready(p.written)
+	if len(cues) != 2 || cues[0].offset < 8*agentPCMSecond || !strings.Contains(cues[1].title, "First track") {
+		t.Fatal("missing music lead-in or restored track metadata", cues)
+	}
+	opening := int(cues[0].offset)
+	if !bytes.Equal(output.Bytes()[:opening], music[:opening]) {
+		t.Fatal("opening music altered")
+	}
+	r, err := convertAgentSpeech(context.Background(), ffmpeg, io.NopCloser(bytes.NewReader(speech)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm, err := io.ReadAll(r)
+	r.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pcm = trimAgentSpeech(pcm)
+	want := mixAgentPCM(music[opening:opening+len(pcm)], pcm, .25)
+	if !bytes.Equal(output.Bytes()[opening:], want) {
+		t.Fatal("welcome bypassed speech levelling, ducking or saved volume")
+	}
+	// Discard the undelivered timeline, as an early closed HTTP connection would.
+	retry, _ := run()
+	if calls != 1 {
+		t.Fatal("reconnect made another speech request", calls)
+	}
+	for _, cue := range retry.timeline.ready(retry.written) {
+		if cue.started != nil {
+			cue.started()
+		}
+	}
+	if !q.introPlayed || len(q.introAudio) != 0 || len(q.recentLinks()) != 1 {
+		t.Fatal("delivery did not complete greeting")
+	}
+	_, last := run()
+	if calls != 1 || last.Len() != 0 {
+		t.Fatal("completed greeting repeated")
+	}
+}
+
+func TestSessionIntroductionFailureKeepsMusicAvailable(t *testing.T) {
+	q := &musicQueue{name: "Agent FM"}
+	q.agent = introAgentService{intro: func(context.Context, string) (agentfm.Segment, error) {
+		return agentfm.Segment{}, errors.New("speech unavailable")
+	}}
+	music := bytes.NewReader(agentTestSamples(10*agentPCMRate, .1))
+	var output bytes.Buffer
+	p := &agentProgram{sink: &output, timeline: &agentTimeline{}}
+	if err := p.intro(context.Background(), q, content.Item{}, music); err != nil {
+		t.Fatal(err)
+	}
+	if q.introPlayed || len(q.recentLinks()) != 0 || len(p.timeline.ready(p.written)) != 0 {
+		t.Fatal("failed greeting entered memory or metadata")
+	}
+	if music.Len()+output.Len() != 10*agentPCMSecond {
+		t.Fatal("music lost on greeting failure")
 	}
 }
