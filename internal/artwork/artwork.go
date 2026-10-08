@@ -13,11 +13,22 @@ import (
 )
 
 func RadioJPEG(data []byte) ([]byte, error) {
+	return radioJPEG(data, 4<<20)
+}
+
+// AlbumJPEG accepts larger covers supplied by a pinned private music server.
+// The caller bounds compressed bytes and simultaneous decoding. Public station
+// artwork keeps RadioJPEG's smaller limit.
+func AlbumJPEG(data []byte) ([]byte, error) {
+	return radioJPEG(data, 16<<20)
+}
+
+func radioJPEG(data []byte, maxPixels int) ([]byte, error) {
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-	if config.Width < 1 || config.Height < 1 || config.Width > 4096 || config.Height > 4096 || config.Width*config.Height > 4<<20 {
+	if config.Width < 1 || config.Height < 1 || config.Width > 4096 || config.Height > 4096 || config.Width*config.Height > maxPixels {
 		return nil, http.ErrContentLength
 	}
 	src, _, err := image.Decode(bytes.NewReader(data))

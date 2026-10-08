@@ -94,8 +94,9 @@ func (p *Provider) openConverted(parent context.Context, resource content.Resour
 }
 func (p *Provider) serveConverted(w http.ResponseWriter, r *http.Request, play content.Playback) {
 	// A converted byte stream has different offsets from the original file.
-	// Browsers commonly request bytes=0- for initial playback; that restarts at zero.
-	if raw := r.Header.Get("Range"); raw != "" && raw != "bytes=0-" {
+	// Accept browser opening probes (including bytes=0-1) as a full 200 stream,
+	// matching Play All. Only nonzero/suffix/multiple ranges request real seeking.
+	if !queueOpeningRange(r.Header.Get("Range")) {
 		http.Error(w, "seeking is unavailable for converted tracks", 416)
 		return
 	}

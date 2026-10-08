@@ -79,7 +79,7 @@ func TestConvertedRangeAndHEAD(t *testing.T) {
 	for _, test := range []struct {
 		method, rangeHeader string
 		code                int
-	}{{"HEAD", "", 200}, {"GET", "bytes=100-", 416}, {"GET", "bytes=0-100", 416}} {
+	}{{"HEAD", "", 200}, {"GET", "bytes=100-", 416}, {"GET", "bytes=100-200", 416}, {"GET", "bytes=-100", 416}, {"GET", "bytes=0-1,10-20", 416}, {"GET", "bytes=0-no", 416}} {
 		req := httptest.NewRequest(test.method, "/stream/upnp/test", nil)
 		req.Header.Set("Range", test.rangeHeader)
 		w := httptest.NewRecorder()
@@ -157,5 +157,29 @@ func TestGeneratedFLACPlayback(t *testing.T) {
 	p.DisableTranscode = true
 	if _, e = p.Resolve(context.Background(), page.Items[0].PlaybackID, model.LegacyXML); e == nil {
 		t.Fatal("disabled fallback still resolved")
+	}
+}
+
+// Initial byte probes must enter the conversion path, not return 416. The fake
+// decoder isolates HTTP handling from FFmpeg availability on the test host.
+func TestConvertedOpeningBrowserRanges(t *testing.T) {
+	p, _, _, _ := fixture(t)
+	if _, err := p.Browse(context.Background(), "0", 0, 24); err != nil {
+		t.Fatal(err)
+	}
+	p.ffmpegPath = fakeAgentFFmpeg(t)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(bytes.Repeat([]byte{0x55}, 8192)) }))
+	defer source.Close()
+	for _, raw := range []string{"", "bytes=0-", "bytes=0-1", "bytes=0-8191"} {
+		r := httptest.NewRequest("GET", "/stream/upnp/test", nil)
+		r.Header.Set("Range", raw)
+		w := httptest.NewRecorder()
+		p.serveConverted(w, r, content.Playback{Resource: content.Resource{URL: source.URL, Codec: "FLAC"}})
+		if w.Code != 200 || w.Body.Len() != 8192 || w.Header().Get("Content-Type") != "audio/mpeg" || w.Header().Get("Accept-Ranges") != "none" || w.Header().Get("Content-Range") != "" {
+			t.Fatal(raw, w.Code, w.Body.Len(), w.Header())
+		}
+		if len(p.conversionSlots) != 0 {
+			t.Fatal("conversion slot leaked")
+		}
 	}
 }

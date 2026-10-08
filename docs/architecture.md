@@ -126,3 +126,12 @@ Station, podcast and music playback share `delivery.Relay` status tracking. Musi
 Finite radio playback with a known duration retains its latest active record after successful download completion until the estimated finish time, bounded to 24 hours. The next selection replaces buffered finite status for that radio; source failures remove their own record, while a cancelled client music request retains its known-duration estimate because buffered playback may continue; expiry is checked when reading active status. Unknown-duration streams remain connection-based. The server cannot observe a device-local stop after full buffering. No persistent music metadata database or device control protocol is introduced.
 
 Finite media attribution accepts a validated explicit radio ID regardless of a browser-style media user agent; the explicit `listener=web` exclusion still takes priority. Native music transfer completion also checks delivered bytes against the upstream Content-Length, so a cancellation observed with the final advertised bytes does not discard buffered playback status. Music activity logs expose linked/unlinked and complete/interrupted stages without source URLs or identifying queries.
+
+### Large album covers and Safari opening probes
+
+Private UPnP artwork supports bounded covers up to 4096 × 4096 pixels, with two
+concurrent decoders across providers. Public station artwork keeps its smaller
+four-megapixel limit. Converted single-track playback accepts valid initial byte
+ranges starting at zero as a full HTTP 200 stream, matching Play All. Nonzero
+seeking remains unsupported. See [the Ultimate 80s comparison](album-comparison.md)
+for the live evidence and regression coverage.

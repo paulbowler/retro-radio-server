@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// Large private-library covers can expand substantially when decoded. Share
+// a two-decoder limit across all providers, waiting under the request deadline.
+var albumArtworkDecoders = make(chan struct{}, 2)
+
 // ServeArtwork translates server-supplied albumArtURI to the existing radio JPEG format.
 func (p *Provider) ServeArtwork(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" && r.Method != "HEAD" {
@@ -61,7 +65,14 @@ func (p *Provider) ServeArtwork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "music artwork unavailable", 502)
 		return
 	}
-	data, e = artwork.RadioJPEG(data)
+	select {
+	case albumArtworkDecoders <- struct{}{}:
+		defer func() { <-albumArtworkDecoders }()
+	case <-ctx.Done():
+		http.Error(w, "music artwork unavailable", 502)
+		return
+	}
+	data, e = artwork.AlbumJPEG(data)
 	if e != nil {
 		http.Error(w, "music artwork unavailable", 502)
 		return
