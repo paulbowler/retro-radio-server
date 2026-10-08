@@ -244,10 +244,39 @@ func TestSessionIntroUsesSelectedVoiceAndOnlySpeechAPI(t *testing.T) {
 		w.Write([]byte("MP3"))
 	}))
 	defer server.Close()
-	c := New(Config{Key: "test", VoiceSelection: func() string { return "nova" }})
+	dir := t.TempDir()
+	c := New(Config{Key: "test", IntroDir: dir, VoiceSelection: func() string { return "nova" }})
 	c.base = server.URL
 	s, err := c.Intro(context.Background(), "Jazz FM")
 	if err != nil || calls != 1 || string(s.Audio) != "MP3" || !strings.HasPrefix(s.Text, "You're listening to Retro Radio.") {
 		t.Fatal(s, err, calls)
+	}
+}
+
+func TestStoredStationWelcomeSurvivesRestartAndVoiceChange(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte("stored MP3"))
+	}))
+	defer server.Close()
+	config := Config{Key: "test", IntroDir: t.TempDir(), Voice: "ballad"}
+	first := New(config)
+	first.base = server.URL
+	for i := 0; i < 2; i++ {
+		s, err := first.Intro(context.Background(), "Jazz FM")
+		if err != nil || string(s.Audio) != "stored MP3" {
+			t.Fatal(s, err)
+		}
+	}
+	config.Voice = "nova"
+	restarted := New(config)
+	restarted.base = server.URL
+	s, err := restarted.Intro(context.Background(), "Jazz FM")
+	if err != nil || string(s.Audio) != "stored MP3" || calls != 1 {
+		t.Fatal("welcome regenerated", err, calls)
+	}
+	if _, err := restarted.Intro(context.Background(), "Pop FM"); err != nil || calls != 2 {
+		t.Fatal("stations did not have separate welcomes", err, calls)
 	}
 }

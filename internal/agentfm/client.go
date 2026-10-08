@@ -5,12 +5,16 @@ package agentfm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,16 +47,19 @@ type Service interface {
 	Prepare(context.Context, Track, []Track) (Segment, error)
 }
 type Config struct {
+	IntroDir                                     string // Persistent station welcomes; independent of programme links.
 	Key, TextModel, SpeechModel, Voice, Delivery string
 	VoiceSelection                               func() string
 	LocalSettings                                func() LocalSettings
 	LocalModel                                   string
 }
 type Client struct {
-	config Config
-	http   *http.Client
-	base   string
-	local  *localService
+	config  Config
+	http    *http.Client
+	base    string
+	local   *localService
+	introMu sync.Mutex
+	intros  map[string][]byte
 }
 
 func New(c Config) *Client {
@@ -240,9 +247,61 @@ func (c *Client) Intro(ctx context.Context, station string) (Segment, error) {
 		station = "Agent FM"
 	}
 	s := Segment{Text: "You're listening to Retro Radio. Welcome to " + station + ". Good music, thoughtfully chosen. Let's begin."}
-	var err error
-	s.Audio, err = c.speech(ctx, s.Text)
-	return s, err
+	c.introMu.Lock()
+	defer c.introMu.Unlock()
+	if c.intros == nil {
+		c.intros = make(map[string][]byte)
+	}
+	if audio := c.intros[station]; len(audio) > 0 {
+		s.Audio = audio
+		return s, nil
+	}
+	var path string
+	if c.config.IntroDir != "" {
+		path = filepath.Join(c.config.IntroDir, fmt.Sprintf("%x.mp3", sha256.Sum256([]byte(station))))
+		audio, err := os.ReadFile(path)
+		if err == nil && len(audio) > 0 && len(audio) <= MaxAudio {
+			c.intros[station] = audio
+			s.Audio = audio
+			return s, nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return s, fmt.Errorf("read station welcome: %w", err)
+		}
+		if err == nil {
+			return s, errors.New("invalid stored station welcome")
+		}
+	}
+	audio, err := c.speech(ctx, s.Text)
+	if err != nil {
+		return s, err
+	}
+	if len(audio) == 0 {
+		return s, errors.New("empty station welcome")
+	}
+	if path != "" {
+		if err = os.MkdirAll(c.config.IntroDir, 0700); err != nil {
+			return s, err
+		}
+		file, err := os.CreateTemp(c.config.IntroDir, ".welcome-*")
+		if err != nil {
+			return s, err
+		}
+		defer os.Remove(file.Name())
+		_, err = file.Write(audio)
+		closeErr := file.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err == nil {
+			err = os.Rename(file.Name(), path)
+		}
+		if err != nil {
+			return s, fmt.Errorf("save station welcome: %w", err)
+		}
+	}
+	c.intros[station], s.Audio = audio, audio
+	return s, nil
 }
 
 func (c *Client) speech(ctx context.Context, text string) ([]byte, error) {

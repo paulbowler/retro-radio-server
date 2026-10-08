@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -214,125 +215,51 @@ func (p *agentProgram) transition(q *musicQueue, tail, speech []byte, next conte
 	return nil
 }
 
-// Start music immediately so legacy radios can finish opening their decoder.
-// Prepare the welcome in parallel, then duck the music under it after eight
-// seconds of programme audio. No online call is awaited at a silent boundary.
-func (p *agentProgram) intro(parent context.Context, q *musicQueue, first content.Item, music io.Reader) error {
-	q.linkMu.Lock()
-	played := q.introPlayed
-	q.linkMu.Unlock()
-	if played {
-		return nil
-	}
+// Prepare the stored station welcome using the current volume. No music is
+// consumed here; the radio receives a finite opening file before its programme.
+func agentWelcome(parent context.Context, q *musicQueue) ([]byte, string, error) {
 	presenter, ok := q.agent.(interface {
 		Intro(context.Context, string) (agentfm.Segment, error)
 	})
-	if !ok {
-		return nil
+	if !ok || q.introDone {
+		return nil, "", nil
 	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
-	done := make(chan struct{})
-	var speech []byte
-	var text string
-	var preparationErr error
-	go func() {
-		defer close(done)
-		q.linkMu.Lock()
-		cached := q.introAudio
-		text = q.introText
-		q.linkMu.Unlock()
-		stage := "speech generation"
-		if len(cached) == 0 {
-			var segment agentfm.Segment
-			segment, preparationErr = presenter.Intro(ctx, q.name)
-			if preparationErr == nil && len(segment.Audio) > 0 && len(segment.Audio) <= agentfm.MaxAudio {
-				cached, text = segment.Audio, segment.Text
-				q.linkMu.Lock()
-				q.introAudio, q.introText = cached, text
-				q.linkMu.Unlock()
-			} else if preparationErr == nil {
-				preparationErr = errors.New("empty or oversized greeting")
-			}
-		}
-		if preparationErr == nil {
-			stage = "speech conversion"
-			var audio io.ReadCloser
-			audio, preparationErr = convertAgentSpeech(ctx, q.ffmpeg, io.NopCloser(bytes.NewReader(cached)))
-			if preparationErr == nil {
-				speech, preparationErr = io.ReadAll(io.LimitReader(audio, maxAgentSpeechPCM+1))
-				audio.Close()
-				if preparationErr == nil && (len(speech) > maxAgentSpeechPCM || len(trimAgentSpeech(speech)) == 0) {
-					preparationErr = errors.New("silent or oversized greeting")
-				}
-				speech = trimAgentSpeech(speech)
-			}
-		}
-		if ctx.Err() != nil {
-			preparationErr = ctx.Err()
-		}
-		if preparationErr != nil && parent.Err() == nil {
-			log.Printf("Agent FM: session introduction unavailable during %s: %v; continuing music", stage, preparationErr)
-		}
-	}()
-	defer func() { cancel(); <-done }()
-	buffer := make([]byte, 8192)
-	const leadIn = 8 * agentPCMSecond
-	for {
-		select {
-		case <-done:
-			if preparationErr != nil {
-				return parent.Err()
-			}
-			if p.written >= leadIn {
-				goto welcome
-			}
-		default:
-		}
-		n, err := io.ReadFull(music, buffer)
-		if n%agentPCMFrame != 0 {
-			return errors.New("incomplete Agent FM opening PCM frame")
-		}
-		if e := p.write(buffer[:n]); e != nil {
-			return e
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				return nil
-			}
-			return err
-		}
+	defer cancel()
+	segment, err := presenter.Intro(ctx, q.name)
+	if err != nil {
+		return nil, "", err
 	}
-welcome:
-	p.cue(q.name+" - Retro Radio", nil, false)
-	for len(speech) > 0 {
-		count := min(len(buffer), len(speech))
-		n, err := io.ReadFull(music, buffer[:count])
-		if n%agentPCMFrame != 0 {
-			return errors.New("incomplete Agent FM opening PCM frame")
-		}
-		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-			return err
-		}
-		if e := p.write(mixAgentPCM(buffer[:n], speech[:count], agentVoiceGain(q))); e != nil {
-			return e
-		}
-		speech = speech[count:]
+	if len(segment.Audio) == 0 || len(segment.Audio) > agentfm.MaxAudio {
+		return nil, "", errors.New("empty or oversized welcome")
 	}
-	p.timeline.add(agentCue{offset: p.written, title: queueTitle(first), started: func() {
-		q.linkMu.Lock()
-		q.introPlayed = true
-		q.introAudio = nil
-		q.introText = ""
-		q.linkMu.Unlock()
-		q.rememberLink(text)
-		log.Print("Agent FM: session introduction sent")
-	}})
-	return nil
+	audio, err := convertAgentSpeech(ctx, q.ffmpeg, io.NopCloser(bytes.NewReader(segment.Audio)))
+	if err != nil {
+		return nil, "", err
+	}
+	defer audio.Close()
+	speech, err := io.ReadAll(io.LimitReader(audio, maxAgentSpeechPCM+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if len(speech) > maxAgentSpeechPCM {
+		return nil, "", errors.New("oversized welcome")
+	}
+	speech = trimAgentSpeech(speech)
+	if len(speech) == 0 {
+		return nil, "", errors.New("silent welcome")
+	}
+	return mixAgentPCM(nil, speech, agentVoiceGain(q)), segment.Text, nil
+}
+
+func finishAgentWelcome(q *musicQueue, text string) {
+	q.introDone = true
+	q.rememberLink(text)
+	log.Print("Agent FM: session introduction sent")
 }
 
 func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p *agentProgram) error {
 	var primed *primedAgentTrack
-	opening := true
 	defer func() {
 		if primed != nil {
 			primed.audio.Close()
@@ -354,13 +281,6 @@ func (m *Manager) agentProgram(ctx context.Context, q *musicQueue, index int, p 
 		}
 		play.Transcode = true
 		p.cue(queueTitle(play.Item), &play, false)
-		if opening {
-			opening = false
-			if err = p.intro(ctx, q, item, audio); err != nil {
-				audio.Close()
-				return err
-			}
-		}
 		candidates := agentCandidates(q, item)
 		job := prepareAgentLink(ctx, q, item, candidates)
 		future := m.primeAgentTrack(ctx, q, job, candidates)
@@ -426,12 +346,51 @@ func (m *Manager) serveAgentQueue(w http.ResponseWriter, r *http.Request, q *mus
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	welcome, welcomeText, err := agentWelcome(ctx, q)
+	if err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		log.Printf("Agent FM: session introduction unavailable: %v; starting music", err)
+		q.introDone = true
+	}
+	if len(welcome) > 0 && r.URL.Query().Get("listener") != "web" {
+		encoded, err := convertAgentAudio(ctx, q.ffmpeg, "f32le", io.NopCloser(bytes.NewReader(welcome)), true)
+		if err != nil {
+			http.Error(w, "Station welcome unavailable", 502)
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(encoded, agentfm.MaxAudio+1))
+		encoded.Close()
+		if err != nil || len(data) > agentfm.MaxAudio {
+			http.Error(w, "Station welcome unavailable", 502)
+			return
+		}
+		// A finite MP3 lets the Pure play the complete welcome, then reconnect to
+		// this queue for music. Subsequent tracks never close the programme stream.
+		w.Header().Del("icy-metaint")
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		n, err := w.Write(data)
+		if err == nil && n == len(data) && ctx.Err() == nil {
+			finishAgentWelcome(q, welcomeText)
+		}
+		return
+	}
 	pcm, input := io.Pipe()
 	timeline := &agentTimeline{}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		err := m.agentProgram(ctx, q, index, &agentProgram{sink: input, timeline: timeline})
+		p := &agentProgram{sink: input, timeline: timeline}
+		if len(welcome) > 0 {
+			p.cue(q.name+" - Retro Radio", nil, false)
+			if err := p.write(welcome); err != nil {
+				input.CloseWithError(err)
+				return
+			}
+			timeline.add(agentCue{offset: p.written, started: func() { finishAgentWelcome(q, welcomeText) }})
+		}
+		err := m.agentProgram(ctx, q, index, p)
 		input.CloseWithError(err)
 	}()
 	// One encoder for the whole session: no repeated MP3 padding or resets.

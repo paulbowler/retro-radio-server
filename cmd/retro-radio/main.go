@@ -84,7 +84,7 @@ func main() {
 	var localReset func()
 	var localItems func() []agentfm.LocalItem
 	if os.Getenv("RETRO_AGENT_FM") == "true" {
-		client := agentfm.New(agentfm.Config{Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), VoiceSelection: func() string { return s.Settings().AgentVoice }, LocalModel: os.Getenv("RETRO_AGENT_LOCAL_MODEL"), LocalSettings: func() agentfm.LocalSettings {
+		client := agentfm.New(agentfm.Config{IntroDir: filepath.Join(filepath.Dir(path), "agent-intros"), Key: os.Getenv("OPENAI_API_KEY"), TextModel: os.Getenv("RETRO_AGENT_TEXT_MODEL"), SpeechModel: os.Getenv("RETRO_AGENT_SPEECH_MODEL"), Voice: os.Getenv("RETRO_AGENT_VOICE"), VoiceSelection: func() string { return s.Settings().AgentVoice }, LocalModel: os.Getenv("RETRO_AGENT_LOCAL_MODEL"), LocalSettings: func() agentfm.LocalSettings {
 			settings := s.Settings()
 			return agentfm.LocalSettings{Enabled: settings.AgentLocalEnabled, Automatic: settings.AgentAutoLocation, Location: settings.AgentLocation, Country: settings.Country, Sources: settings.AgentLocalSources}
 		}, Delivery: os.Getenv("RETRO_AGENT_DELIVERY")})

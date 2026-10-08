@@ -8,19 +8,20 @@ After the library scan, each new Agent FM or genre FM session opens with
 “You're listening to Retro Radio. Welcome to [station name]. Good music,
 thoughtfully chosen. Let's begin.” The bracketed placeholder is replaced with
 Agent FM, Jazz FM or the chosen genre station name; brackets are not spoken.
-The first song starts immediately after the library scan. After at least eight
-seconds of music, the welcome plays over a lowered music bed in the same continuous
-stream, using the saved voice, speech levelling and DJ volume. This gives the Pure
-time to establish playback before the greeting. It makes one additional speech
-API request (no text-model call), prepared while music plays with a twenty-second
-limit; failure leaves music playing. Menu browsing and HEAD probes do not
-prepare greetings, and a reconnect after the full greeting was sent does not repeat it.
-A connection cancelled during startup leaves the greeting pending: the next
-connection reuses its downloaded speech instead of skipping it or making another
-speech request. The completed flag follows the encoded output, not synthesis or
-PCM buffering. Server logs distinguish greeting-generation/conversion failures
-from `session introduction sent`.
-Selecting a station afresh creates a new queue and a new greeting.
+The welcome is generated once per station and stored as an MP3 in `agent-intros/`
+beside the database (`/data/agent-intros/` in Docker's existing persistent data
+volume). Later sessions and server restarts reuse it without another speech API
+request. It uses the voice selected when first generated; subsequent voice
+changes affect new DJ links, while the stored station welcome stays unchanged.
+The saved DJ volume applies each time the welcome plays. To deliberately recreate
+a welcome with a different voice, remove its stored MP3 and restart the server.
+
+For the Pure, the welcome is a short, finite stream. At its end the radio reconnects
+to the same queue URL, which then serves the continuous music programme. A brief
+pause between the welcome and music is acceptable; tracks and DJ links never
+require another stream switch. The web player receives the welcome followed by
+music in one connection. Menu browsing and HEAD probes do not generate welcomes.
+If welcome preparation fails, music starts instead and the server logs the error.
 
 While the first track plays,
 the server sends candidate track metadata and recent programme context to
