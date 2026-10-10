@@ -43,7 +43,7 @@ func RankedStreams(s model.Station, c model.Capabilities, preferred string) []mo
 	}
 	out := []model.StreamVariant{}
 	for _, v := range variants {
-		if ValidateURL(v.URL) == nil && supported(v.Station(s), c) {
+		if selectionURL(v.Station(s)) == nil && supported(v.Station(s), c) {
 			out = append(out, v)
 		}
 	}
@@ -175,7 +175,7 @@ func (p *Relay) openStream(r *http.Request, s model.Station) (model.Station, *ht
 		if s.ID != "" && r.Method == "GET" && r.Header.Get("Range") == "" {
 			req.Header.Set("Icy-MetaData", "1")
 		}
-		res, err := p.request(req)
+		res, err := p.stationRequest(chosen, req)
 		h := model.Health{StationID: s.ID, VariantID: v.ID, Checked: time.Now().UTC(), Codec: v.Codec, Bitrate: v.Bitrate}
 		if err != nil {
 			last = err

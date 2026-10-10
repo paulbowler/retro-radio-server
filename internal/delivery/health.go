@@ -67,7 +67,7 @@ func (p *Relay) check(ctx context.Context, s model.Station, persist bool) (model
 		h.LastSuccess = old.LastSuccess
 	}
 	fail := func(message string) (model.Health, error) { h.Message = message; return h, save(h) }
-	if e := ValidateURL(s.URL); e != nil {
+	if e := p.validateStation(s); e != nil {
 		return fail("Unsafe upstream URL")
 	}
 	if kind := adaptiveKind(s.URL, "", s.HLS); kind != "" {
@@ -78,7 +78,7 @@ func (p *Relay) check(ctx context.Context, s model.Station, persist bool) (model
 		return fail("Invalid upstream URL")
 	}
 	req.Header.Set("User-Agent", "RetroRadio/0.2 health check")
-	res, e := p.request(req)
+	res, e := p.stationRequest(s, req)
 	if e != nil {
 		if errors.Is(e, ErrUnsafeTarget) {
 			return fail("Blocked address: check local DNS overrides")
@@ -110,8 +110,14 @@ func (p *Relay) check(ctx context.Context, s model.Station, persist bool) (model
 		}
 	}
 	if kind := adaptiveKind(s.URL, content, s.HLS); kind != "" {
+		if p.lanClient(s) != nil {
+			return fail("LAN streams must be direct MP3/AAC audio")
+		}
 		res.Body.Close()
 		return p.checkAdaptive(ctx, s, h, kind, save)
+	}
+	if p.lanClient(s) != nil && h.Codec != "MP3" && h.Codec != "AAC" {
+		return fail("LAN streams must return MP3 or AAC audio")
 	}
 	if content == "audio/x-scpls" {
 		return fail("PLS playlist is not supported")

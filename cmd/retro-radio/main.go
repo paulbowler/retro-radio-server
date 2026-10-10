@@ -66,6 +66,9 @@ func main() {
 	defer s.DB.Close()
 	gate := &maintenance.Gate{}
 	relay := delivery.New(s)
+	if e := relay.ConfigureLANStreams(context.Background(), os.Getenv("RETRO_LAN_STREAM_URLS")); e != nil {
+		log.Fatal("Invalid LAN stream configuration: ", e)
+	}
 	cat := catalogue.New(s)
 	if mirror := os.Getenv("RETRO_CATALOGUE_URL"); mirror != "" {
 		if e := delivery.ValidateURL(mirror); e != nil {

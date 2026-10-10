@@ -224,3 +224,33 @@ database through current migrations, and refreshes normal sources. App settings,
 secrets and feed subscriptions remain; a private backup is kept. See
 [the rebuild guide](docs/development-rebuild.md) for exact scope, recovery and the
 playback/artwork findings. Leave the feature disabled in production.
+
+### Explicit LAN custom stations
+
+Custom stations normally require public listening URLs. To use a direct MP3/AAC
+stream served on your LAN, set `RETRO_LAN_STREAM_URLS` in `.env` to a comma-separated
+list of exact listening URLs or origin-wide `/*` rules. For example:
+
+```dotenv
+RETRO_LAN_STREAM_URLS=https://station.home.paulbowler.co.uk/*
+```
+
+Rebuild/recreate the application container after updating the configuration
+(`docker compose up -d --build retro-radio`), then add any direct listening URL on that HTTPS origin under Custom
+stations. Local DNS must resolve the hostname from inside the application
+container. All its addresses must be private unicast LAN addresses (RFC1918 or
+IPv6 ULA); loopback, link-local, metadata, multicast and mixed public/private
+answers are rejected. Invalid configuration stops startup.
+
+Addresses are pinned at startup, with TLS certificate/hostname verification
+retained. Restart the application after an intentional address change. Only
+custom stations can use the exception; exact entries restrict every request to the full configured
+URL, including scheme, port, path and query. An origin-wide `/*` rule permits all
+paths and queries on that exact scheme, hostname and port, including redirects
+within that origin. Redirects outside the configured scope are rejected. Wildcard
+hostnames and arbitrary glob patterns are not supported. A hostname-only entry is
+not accepted: include `https://` (or `http://`) and `/*` to specify the origin.
+An origin-wide rule trusts all paths on that service, so use an exact URL if the
+host also serves sensitive pages. Playback and automatic reconnects
+use the same pinned transport. LAN HLS/DASH playlists are not supported by this
+exception. Catalogue, podcast and artwork fetching remain public-only.

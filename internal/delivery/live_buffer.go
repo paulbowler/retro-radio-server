@@ -260,7 +260,7 @@ func (p *Relay) serveBufferedLive(w http.ResponseWriter, r *http.Request, s mode
 
 func (p *Relay) reopenLive(s model.Station) liveOpen {
 	return func(ctx context.Context) (io.ReadCloser, http.Header, error) {
-		if err := ValidateURL(s.URL); err != nil {
+		if err := p.validateStation(s); err != nil {
 			return nil, nil, err
 		}
 		req, err := http.NewRequestWithContext(ctx, "GET", s.URL, nil)
@@ -269,7 +269,7 @@ func (p *Relay) reopenLive(s model.Station) liveOpen {
 		}
 		req.Header.Set("User-Agent", "RetroRadio/0.2")
 		req.Header.Set("Icy-MetaData", "1")
-		res, err := p.request(req)
+		res, err := p.stationRequest(s, req)
 		if err != nil {
 			return nil, nil, err
 		}

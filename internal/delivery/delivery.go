@@ -35,8 +35,14 @@ func PlayURL(base string, s model.Station, c model.Capabilities, health ...model
 	if (s.Codec == "MP3" && !c.MP3) || (s.Codec == "AAC" && !c.AAC) || (s.Codec != "MP3" && s.Codec != "AAC") {
 		return "", errors.New("unsupported codec; no transcoder installed")
 	}
-	if err := ValidateURL(s.URL); err != nil {
+	if err := selectionURL(s); err != nil {
 		return "", err
+	}
+	if s.Source == "custom" {
+		if !c.HTTP {
+			return "", errors.New("device does not support HTTP")
+		}
+		return base + "/stream/" + s.StreamID, nil
 	}
 	u, err := url.Parse(s.URL)
 	if err != nil {
@@ -80,7 +86,9 @@ func SafeIP(ip netip.Addr) bool {
 	}
 	return true
 }
-func ValidateURL(raw string) error {
+func ValidateURL(raw string) error { return validateURL(raw, false) }
+
+func validateURL(raw string, lan bool) error {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return err
@@ -90,6 +98,9 @@ func ValidateURL(raw string) error {
 	}
 	if !safePort(u.Port()) {
 		return errors.New("upstream port must be 80, 443 or 1024–65535")
+	}
+	if ip, e := netip.ParseAddr(u.Hostname()); e == nil && lan && lanIP(ip) {
+		return nil
 	}
 	return literalIP(u.Hostname())
 }
@@ -197,6 +208,7 @@ type Active struct {
 type Relay struct {
 	Store         *store.Store
 	Client        *http.Client
+	lanStreams    map[string]*http.Client
 	mu            sync.Mutex
 	active        map[uint64]Active
 	next          uint64
@@ -255,7 +267,7 @@ func (p *Relay) ServeEpisode(w http.ResponseWriter, r *http.Request) {
 
 // ServeAudio relays a trusted catalogue record using checked upstream connections.
 func (p *Relay) ServeAudio(w http.ResponseWriter, r *http.Request, s model.Station) {
-	if err := ValidateURL(s.URL); err != nil {
+	if err := p.validateStation(s); err != nil {
 		http.Error(w, "unsafe upstream", 502)
 		return
 	}
@@ -353,4 +365,7 @@ func (p *Relay) ClearPlaybackState() {
 	defer p.mu.Unlock()
 	p.active = map[uint64]Active{}
 	p.Client.CloseIdleConnections()
+	for _, client := range p.lanStreams {
+		client.CloseIdleConnections()
+	}
 }

@@ -757,8 +757,8 @@ func (a *App) custom(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if e = delivery.CheckTarget(ctx, s.URL); e != nil {
-		fail("This listening link cannot be reached. Use the station’s public listening link.")
+	if e = a.Relay.CheckStationTarget(ctx, s); e != nil {
+		fail("This listening link cannot be reached. Use a public listening link or ask your administrator to configure this LAN stream or its host.")
 		return
 	}
 	health, checkErr := a.Relay.Probe(r.Context(), s)

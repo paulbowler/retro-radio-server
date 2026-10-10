@@ -35,7 +35,7 @@ A single Go template renders station cards across discovery, search, library and
 
 ## Playback and upstream safety
 
-Playback accepts stored opaque identifiers rather than arbitrary target URLs. Initial links, DNS answers and redirects reject loopback, private, link-local, metadata and other non-public addresses. Checked addresses are pinned for dialing while TLS hostname verification stays enabled. URL credentials and environment HTTP proxies are disallowed. Public ports 80, 443 and 1024–65535 are supported.
+Playback accepts stored opaque identifiers rather than arbitrary target URLs. By default, initial links, DNS answers and redirects reject loopback, private, link-local, metadata and other non-public addresses. Checked addresses are pinned for dialing while TLS hostname verification stays enabled. URL credentials and environment HTTP proxies are disallowed. Public ports 80, 443 and 1024–65535 are supported.
 
 HTTP links are attempted over verified HTTPS first, falling back to the original HTTP origin when necessary. Explicit HTTPS links retain certificate checks. Compatible, recently checked HTTP streams may be played directly; other legacy-radio streams use a local HTTP relay. Direct-play health expires after one hour. The default profile allows MP3 and AAC over HTTP, including ICY metadata.
 
@@ -135,3 +135,12 @@ four-megapixel limit. Converted single-track playback accepts valid initial byte
 ranges starting at zero as a full HTTP 200 stream, matching Play All. Nonzero
 seeking remains unsupported. See [the Ultimate 80s comparison](album-comparison.md)
 for the live evidence and regression coverage.
+
+
+Administrator-configured `RETRO_LAN_STREAM_URLS` grants a separate transport only
+to custom stations whose URL matches an exact entry or an origin-wide `/*` rule. The entry must resolve
+exclusively to private unicast addresses; those addresses are pinned at startup.
+Requests and redirects must remain within the exact URL or configured scheme/host/port. Hostname wildcards are not supported. Custom station playback stays
+behind the relay, including reconnects, so a saved record cannot bypass the
+current configuration. This permits direct MP3/AAC LAN audio without granting
+catalogue, podcast, artwork or adaptive resource fetching access to the LAN.
