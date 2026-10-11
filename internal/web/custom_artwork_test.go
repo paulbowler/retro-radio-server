@@ -4,6 +4,8 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -43,6 +45,9 @@ func TestCustomArtworkFromPublisherAndSharedCache(t *testing.T) {
 				switch r.URL.Path {
 				case "/live":
 					kind = "audio/mpeg"
+					if source == "origin page" {
+						headers.Set("icy-logo", "http://127.0.0.1/private-logo.png")
+					}
 					if source == "stream website" {
 						headers.Set("icy-url", "https://8.8.8.8/listen/custom")
 					}
@@ -131,3 +136,67 @@ func TestArtworkDiscoveryDoesNotCacheOldStreamLogoAfterEdit(t *testing.T) {
 		t.Fatal("old logo cached for new listening link")
 	}
 }
+
+// Bowler FM publishes icy-logo while its StationOS homepage requires login.
+func TestCustomArtworkUsesICYLogoWithoutHomepageAccess(t *testing.T) {
+	for _, header := range []string{"/station-logos/bowler.jpg?v=123", "https://1.1.1.1/station-logos/bowler.jpg?v=123"} {
+		t.Run(header, func(t *testing.T) {
+			db, err := store.Open(filepath.Join(t.TempDir(), "icy.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.DB.Close()
+			station, err := db.SaveStation(model.Station{Source: "custom", Name: "Bowler FM", URL: "https://1.1.1.1/streams/bowler-fm", Codec: "MP3"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var logo bytes.Buffer
+			png.Encode(&logo, image.NewRGBA(image.Rect(0, 0, 32, 32)))
+			stream := &unreadStreamBody{t: t}
+			calls := 0
+			client := &http.Client{Transport: roundTripper(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.URL.Path == "/streams/bowler-fm" {
+					return &http.Response{StatusCode: 200, Header: http.Header{"Icy-Logo": {header}, "Content-Type": {"audio/mpeg"}}, Body: stream, Request: r}, nil
+				}
+				if r.URL.Path != "/station-logos/bowler.jpg" || r.URL.RawQuery != "v=123" {
+					t.Fatal("unexpected homepage or directory request", r.URL)
+				}
+				if !stream.closed {
+					t.Fatal("audio response still open during logo fetch")
+				}
+				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(bytes.NewReader(logo.Bytes())), Request: r}, nil
+			})}
+			app := &App{Store: db, Relay: delivery.New(db), ArtworkClient: client}
+			h := app.Handler()
+			// The previous implementation's missing-logo cache must not delay this fix.
+			prior := fmt.Sprintf("%x", sha256.Sum256([]byte("custom-artwork:v2:"+station.URL+":"+station.Homepage+":"+station.Favicon)))
+			db.SaveArtwork(prior, store.Artwork{Data: []byte{}, Radio: []byte{}})
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest("GET", "/stations/"+station.ID+"/artwork", nil))
+			if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), logo.Bytes()) || calls != 2 {
+				t.Fatal("ICY logo not served", w.Code, calls)
+			}
+			saved, _ := db.Station(station.ID, false)
+			if saved.Favicon != "https://1.1.1.1/station-logos/bowler.jpg?v=123" {
+				t.Fatal("ICY URL not saved", saved.Favicon)
+			}
+			w = httptest.NewRecorder()
+			app.ServeRadioArtwork(w, httptest.NewRequest("GET", "/artwork/"+station.ID+".jpg", nil))
+			if w.Header().Get("Content-Type") != "image/jpeg" || calls != 2 {
+				t.Fatal("radio logo was not cached", calls)
+			}
+		})
+	}
+}
+
+type unreadStreamBody struct {
+	t      *testing.T
+	closed bool
+}
+
+func (b *unreadStreamBody) Read([]byte) (int, error) {
+	b.t.Fatal("artwork discovery read endless audio")
+	return 0, io.EOF
+}
+func (b *unreadStreamBody) Close() error { b.closed = true; return nil }

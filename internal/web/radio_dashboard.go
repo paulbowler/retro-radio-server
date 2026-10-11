@@ -100,7 +100,9 @@ func artworkKey(s model.Station) string {
 	// Share downloaded bytes between search results, saved cards and radio JPEGs.
 	raw := s.Favicon
 	if s.Source == "custom" {
-		raw = "custom-artwork:v2:" + s.URL + ":" + s.Homepage + ":" + s.Favicon
+		// Retry publisher discovery immediately after adding icy-logo support,
+		// including stations negatively cached by the previous implementation.
+		raw = "custom-artwork:v3:" + s.URL + ":" + s.Homepage + ":" + s.Favicon
 	}
 	if raw == "" {
 		raw = s.RBUUID + ":" + s.URL

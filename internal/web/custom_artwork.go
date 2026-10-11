@@ -16,19 +16,30 @@ import (
 )
 
 // Discover publisher artwork without relying on the station being in a directory.
-// Stream bodies are never read: only the broadcaster's icy-url header is needed.
+// Stream bodies are never read: publisher artwork and website headers suffice.
 func (a *App) customArtwork(ctx context.Context, s model.Station) (store.Artwork, error) {
 	pages := []string{s.Homepage}
 	if res, err := a.artworkRequest(ctx, s, s.URL); err == nil {
-		if res.StatusCode == http.StatusOK {
-			base := s.URL
-			if res.Request != nil {
-				base = res.Request.URL.String()
-			}
-			pages = append(pages, artworkReference(base, res.Header.Get("icy-url")))
+		base := s.URL
+		if res.Request != nil {
+			base = res.Request.URL.String()
 		}
+		image, website := "", ""
+		if res.StatusCode == http.StatusOK {
+			image = artworkReference(base, res.Header.Get("icy-logo"))
+			website = artworkReference(base, res.Header.Get("icy-url"))
+		}
+		// Release the endless audio response before requesting its logo.
 		res.Body.Close()
+		if image != "" {
+			if logo, err := a.downloadArtwork(ctx, s, image); err == nil && len(logo.Radio) > 0 {
+				a.rememberCustomArtwork(s, image, website)
+				return logo, nil
+			}
+		}
+		pages = append(pages, website)
 	}
+
 	u, err := url.Parse(s.URL)
 	if err != nil {
 		return store.Artwork{}, err
@@ -72,14 +83,21 @@ func (a *App) customArtwork(ctx context.Context, s model.Station) (store.Artwork
 			if err != nil || len(logo.Radio) == 0 {
 				continue
 			}
-			// Do not attach a logo discovered for an old stream during a concurrent edit.
-			if s.ID != "" {
-				_, _ = a.Store.DB.Exec(`UPDATE stations SET favicon=?,homepage=? WHERE id=? AND source='custom' AND url=? AND favicon=''`, image, base, s.ID, s.URL)
-			}
+			a.rememberCustomArtwork(s, image, base)
 			return logo, nil
 		}
 	}
 	return store.Artwork{}, fmt.Errorf("station artwork unavailable")
+}
+
+// Do not attach a logo discovered for an old stream during a concurrent edit.
+func (a *App) rememberCustomArtwork(s model.Station, image, website string) {
+	if s.ID != "" {
+		if website == "" {
+			website = s.Homepage
+		}
+		_, _ = a.Store.DB.Exec(`UPDATE stations SET favicon=?,homepage=? WHERE id=? AND source='custom' AND url=? AND favicon=''`, image, website, s.ID, s.URL)
+	}
 }
 
 func artworkReference(base, raw string) string {
