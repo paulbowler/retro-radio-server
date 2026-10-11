@@ -129,6 +129,11 @@ func (s *Store) SaveStation(a model.Station) (model.Station, error) {
 		}
 		_, e = tx.Exec(`UPDATE stations SET name=?,url=?,codec=?,bitrate=?,country=?,tags=?,language=?,hls=? WHERE id=? AND source='custom'`, a.Name, a.URL, a.Codec, a.Bitrate, a.Country, a.Tags, a.Language, a.HLS, a.ID)
 		if e == nil && oldURL != a.URL {
+			a.Favicon, a.Homepage = "", ""
+			_, e = tx.Exec(`UPDATE stations SET favicon='',homepage='' WHERE id=?`, a.ID)
+			if e != nil {
+				return a, e
+			}
 			_, e = tx.Exec(`DELETE FROM stream_health WHERE station_id=?`, a.ID)
 			if e == nil {
 				_, e = tx.Exec(`DELETE FROM stream_variants WHERE station_id=?`, a.ID)

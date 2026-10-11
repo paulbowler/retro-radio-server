@@ -194,3 +194,18 @@ func (p *Relay) stationRequest(s model.Station, req *http.Request) (*http.Respon
 	}
 	return p.request(req)
 }
+
+// StationResourceClient permits publisher metadata/artwork on configured LAN
+// origins using the same pinned, scoped transport as audio. Other resources
+// retain the public-only policy; an exact stream entry grants no other paths.
+func (p *Relay) StationResourceClient(s model.Station, raw string) (*http.Client, error) {
+	if client := p.lanClient(s); client != nil {
+		if scope, ok := client.Transport.(scopedStreamTransport); ok && lanScopeMatches(scope.raw, raw) {
+			return client, nil
+		}
+	}
+	if err := ValidateURL(raw); err != nil {
+		return nil, err
+	}
+	return p.Client, nil
+}

@@ -221,7 +221,7 @@ func TestSharedArtworkFallback(t *testing.T) {
 			if scenario == "private" {
 				favicon = "http://127.0.0.1/logo.png"
 			}
-			// A custom station with no directory identity needs no external lookup.
+			// Custom stations without an image now attempt publisher discovery.
 			_, err := s.DB.Exec(`UPDATE stations SET favicon=?, source='custom' WHERE id='1001'`, favicon)
 			if err != nil {
 				t.Fatal(err)
@@ -271,7 +271,7 @@ func TestSharedArtworkFallback(t *testing.T) {
 					}
 				}
 			}
-			if (scenario == "missing" || scenario == "private") && calls != 0 {
+			if scenario == "private" && calls != 0 {
 				t.Fatal("unexpected upstream request", calls)
 			}
 		})

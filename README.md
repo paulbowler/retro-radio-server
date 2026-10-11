@@ -192,6 +192,8 @@ Audio alternatives are grouped when the station name and country match and the w
 
 Database schema 6 preserves alternatives and combines favourites for confirmed duplicates. Old station and stream addresses remain aliases. Back up the persistent `/data` directory before upgrading.
 
+Custom stations automatically look for their publisher’s logo on the website supplied by the stream’s `icy-url` header, then on the stream host’s homepage. Page sharing images and touch icons take priority over favicons. Discovery uses bounded requests and the existing artwork cache, and supplies both web images and 128-pixel radio JPEGs. If no usable publisher image is found, an exact directory stream match can supply one; otherwise the Retro Radio image remains the fallback. Changing a custom listening link clears its old publisher image. LAN logos use the existing pinned host scope (`RETRO_LAN_STREAM_URLS=https://station.example/*`); exact stream rules do not authorize other paths.
+
 Saved stations and per-radio favourites load from the local database without contacting Radio-Browser or probing streams when viewed. Artwork is cached persistently (including the radio-sized JPEG), shared across search and library cards, and served immediately. Images older than seven days refresh in the background; the last good image remains available during outages. Failed or missing artwork is retried after 15 minutes. The artwork cache is bounded to 64 MiB and survives server restarts. Directory searches retain their existing 15–30 minute cache and offline fallback.
 
 Nested web pages place their Back link above the title. Opening a folder, switching sections or changing pages starts at the top; Back and Forward restore the previous scroll position. Background refreshes and in-place edits preserve it. Music album artwork is 25% larger while retaining the side-by-side track details.
@@ -253,4 +255,6 @@ not accepted: include `https://` (or `http://`) and `/*` to specify the origin.
 An origin-wide rule trusts all paths on that service, so use an exact URL if the
 host also serves sensitive pages. Playback and automatic reconnects
 use the same pinned transport. LAN HLS/DASH playlists are not supported by this
-exception. Catalogue, podcast and artwork fetching remain public-only.
+exception. Catalogue and podcast fetching remain public-only. Custom-station
+logo discovery may fetch publisher pages and images within an already configured
+LAN host rule; an exact listening-link rule grants no additional LAN paths.

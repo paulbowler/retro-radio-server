@@ -36,7 +36,8 @@ func listeningDuration(t time.Time) string {
 }
 
 // Artwork is addressed by a saved station ID, never an arbitrary URL. The
-// delivery client pins checked public addresses and validates every redirect.
+// delivery client pins checked addresses and validates every redirect. Custom
+// station resources may use an operator-configured LAN origin.
 func (a *App) stationArtwork(w http.ResponseWriter, r *http.Request) {
 	a.serveStationArtwork(w, r, false)
 }
@@ -83,18 +84,24 @@ func (a *App) serveArtwork(w http.ResponseWriter, r *http.Request, s model.Stati
 		if err != nil {
 			cached = store.Artwork{Data: []byte{}, Radio: []byte{}}
 		}
-		_ = a.Store.SaveArtwork(key, cached)
-		if len(cached.Data) > 0 && s.Favicon == "" && s.ID != "" {
-			if resolved, e := a.Store.Station(s.ID, false); e == nil && artworkKey(resolved) != key {
-				_ = a.Store.SaveArtwork(artworkKey(resolved), cached)
-			}
-		}
+		a.saveStationArtwork(key, s, cached)
 	}
 	serveCachedArtwork(w, r, cached, radio)
+}
+func (a *App) saveStationArtwork(key string, s model.Station, cached store.Artwork) {
+	_ = a.Store.SaveArtwork(key, cached)
+	if len(cached.Data) > 0 && s.Favicon == "" && s.ID != "" {
+		if resolved, err := a.Store.Station(s.ID, false); err == nil && resolved.URL == s.URL && artworkKey(resolved) != key {
+			_ = a.Store.SaveArtwork(artworkKey(resolved), cached)
+		}
+	}
 }
 func artworkKey(s model.Station) string {
 	// Share downloaded bytes between search results, saved cards and radio JPEGs.
 	raw := s.Favicon
+	if s.Source == "custom" {
+		raw = "custom-artwork:v2:" + s.URL + ":" + s.Homepage + ":" + s.Favicon
+	}
 	if raw == "" {
 		raw = s.RBUUID + ":" + s.URL
 	}
@@ -136,7 +143,7 @@ func (a *App) refreshArtwork(key string, s model.Station) {
 			}
 			cached.RetryAfter = time.Now().Add(15 * time.Minute)
 		}
-		_ = a.Store.SaveArtwork(key, cached)
+		a.saveStationArtwork(key, s, cached)
 	}) {
 		a.artworkMu.Lock()
 		delete(a.artworkPending, key)
@@ -144,13 +151,22 @@ func (a *App) refreshArtwork(key string, s model.Station) {
 	}
 }
 func (a *App) fetchArtwork(ctx context.Context, s model.Station) (store.Artwork, error) {
+	if s.Favicon == "" && s.Source == "custom" {
+		if logo, err := a.customArtwork(ctx, s); err == nil {
+			return logo, nil
+		}
+	}
 	if s.Favicon == "" {
 		s.Favicon, _ = a.Catalogue.ArtworkForStation(ctx, s)
 		if s.Favicon != "" && s.ID != "" {
-			_, _ = a.Store.DB.Exec(`UPDATE stations SET favicon=? WHERE id=?`, s.Favicon, s.ID)
+			_, _ = a.Store.DB.Exec(`UPDATE stations SET favicon=? WHERE id=? AND url=? AND favicon=''`, s.Favicon, s.ID, s.URL)
 		}
 	}
-	if delivery.ValidateURL(s.Favicon) != nil {
+	return a.downloadArtwork(ctx, s, s.Favicon)
+}
+func (a *App) downloadArtwork(ctx context.Context, s model.Station, raw string) (store.Artwork, error) {
+	s.Favicon = raw
+	if s.Source != "custom" && delivery.ValidateURL(s.Favicon) != nil {
 		return store.Artwork{}, fmt.Errorf("invalid artwork URL")
 	}
 	req, err := http.NewRequestWithContext(ctx, "GET", s.Favicon, nil)
@@ -162,7 +178,7 @@ func (a *App) fetchArtwork(ctx context.Context, s model.Station) (store.Artwork,
 		client = delivery.NewClient()
 	}
 	var res *http.Response
-	if u, e := url.Parse(s.Favicon); e == nil && u.Scheme == "http" && (u.Port() == "" || u.Port() == "80") {
+	if u, e := url.Parse(s.Favicon); s.Source != "custom" && e == nil && u.Scheme == "http" && (u.Port() == "" || u.Port() == "80") {
 		u.Scheme = "https"
 		u.Host = strings.TrimSuffix(u.Host, ":80")
 		secure, _ := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
@@ -173,7 +189,11 @@ func (a *App) fetchArtwork(ctx context.Context, s model.Station) (store.Artwork,
 		}
 	}
 	if res == nil {
-		res, err = client.Do(req)
+		if s.Source == "custom" {
+			res, err = a.artworkRequest(ctx, s, raw)
+		} else {
+			res, err = client.Do(req)
+		}
 	}
 	if err != nil {
 		return store.Artwork{}, err

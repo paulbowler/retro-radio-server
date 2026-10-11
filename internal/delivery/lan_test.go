@@ -287,3 +287,36 @@ func TestLANEncodedStarRemainsExactURL(t *testing.T) {
 		t.Fatal("encoded star became wildcard")
 	}
 }
+
+func TestStationArtworkResourcesKeepLANScope(t *testing.T) {
+	p := New(nil)
+	scope := "http://station.example/*"
+	pinned := newLANStreamClient(scope, []netip.Addr{netip.MustParseAddr("192.168.1.4")})
+	p.lanStreams = map[string]*http.Client{scope: pinned}
+	s := model.Station{Source: "custom", URL: "http://station.example/live"}
+	for _, raw := range []string{"http://station.example/", "http://station.example/logo.png", "http://station.example/listen/custom"} {
+		got, err := p.StationResourceClient(s, raw)
+		if err != nil || got != pinned {
+			t.Fatal("configured publisher scope lost", raw, err)
+		}
+	}
+	for _, raw := range []string{"https://station.example/logo.png", "http://other.example/logo.png", "http://station.example:8000/logo.png"} {
+		got, err := p.StationResourceClient(s, raw)
+		if err != nil || got != p.Client {
+			t.Fatal("LAN access escaped scope", raw, err)
+		}
+	}
+	if _, err := p.StationResourceClient(s, "http://192.168.1.5/logo.png"); err == nil {
+		t.Fatal("unconfigured private resource allowed")
+	}
+	p.lanStreams = map[string]*http.Client{s.URL: newLANStreamClient(s.URL, []netip.Addr{netip.MustParseAddr("192.168.1.4")})}
+	got, err := p.StationResourceClient(s, "http://station.example/logo.png")
+	if err != nil || got != p.Client {
+		t.Fatal("exact stream scope granted artwork access", err)
+	}
+	s.Source = "seed"
+	got, err = p.StationResourceClient(s, s.URL)
+	if err != nil || got != p.Client {
+		t.Fatal("non-custom station gained LAN access", err)
+	}
+}
