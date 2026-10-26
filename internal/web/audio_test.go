@@ -98,7 +98,7 @@ func TestStationDeliveryControl(t *testing.T) {
 		w := httptest.NewRecorder()
 		app.Handler().ServeHTTP(w, r)
 		station, err := s.Station("1001", false)
-		if w.Code != 200 || err != nil || station.Direct != (mode == "direct") || !strings.Contains(w.Body.String(), "Connect directly") || !strings.Contains(w.Body.String(), "/stream/"+station.StreamID) {
+		if w.Code != 200 || err != nil || station.Direct != (mode == "direct") || !strings.Contains(w.Body.String(), "Direct?") || !strings.Contains(w.Body.String(), "/stream/"+station.StreamID) {
 			t.Fatal(w.Code, w.Body.String(), station, err)
 		}
 	}
