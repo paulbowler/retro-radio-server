@@ -13,7 +13,7 @@ func (a *App) stationDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mode := r.Form.Get("delivery")
-	if mode != "direct" && mode != "proxy" {
+	if mode != "direct" && mode != "proxy" && mode != "" {
 		http.Error(w, "Choose a connection method.", 422)
 		return
 	}

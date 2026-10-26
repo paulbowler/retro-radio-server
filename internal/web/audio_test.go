@@ -91,7 +91,7 @@ func TestStationDeliveryControl(t *testing.T) {
 	}
 	defer s.DB.Close()
 	app := &App{Store: s, Relay: delivery.New(s), Base: "http://radio.local"}
-	for _, mode := range []string{"direct", "proxy"} {
+	for _, mode := range []string{"direct", ""} {
 		r := httptest.NewRequest("POST", "http://radio.local/stations/delivery", strings.NewReader(url.Values{"station": {"1001"}, "delivery": {mode}, "context": {"/stations"}}.Encode()))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		r.Header.Set("HX-Request", "true")
