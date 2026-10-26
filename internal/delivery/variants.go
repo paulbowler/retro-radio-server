@@ -97,6 +97,14 @@ func RadioPlayURL(base string, s model.Station, d model.Device, preferred string
 		return "", s, err
 	}
 	if s.Direct {
+		if selected.OriginalURL != "" {
+			original := selected
+			original.URL = selected.OriginalURL
+			if err := selectionURL(original); err != nil {
+				return "", selected, err
+			}
+			return selected.OriginalURL, selected, nil
+		}
 		return selected.URL, selected, nil
 	}
 	// Radios use the relay so playback can be observed even when the upstream

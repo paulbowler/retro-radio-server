@@ -150,6 +150,11 @@ func (s *Store) withVariants(a model.Station) (model.Station, error) {
 		return a, err
 	}
 	vs, err := s.Variants(a.ID)
+	for i := range vs {
+		if c, e := s.Candidate(vs[i].UUID); e == nil && c.URL != "" {
+			vs[i].OriginalURL = c.URL
+		}
+	}
 	a.Variants = vs
 	return a, err
 }

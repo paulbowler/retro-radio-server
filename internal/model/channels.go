@@ -93,17 +93,19 @@ func GroupCandidates(items []Candidate) []Candidate {
 }
 
 type StreamVariant struct {
-	ID        string `json:"id"`
-	StationID string `json:"station_id"`
-	URL       string `json:"-"`
-	UUID      string `json:"radio_browser_uuid,omitempty"`
-	Codec     string `json:"codec"`
-	Bitrate   int    `json:"bitrate_kbps"`
-	HLS       bool   `json:"adaptive"`
-	Health    Health `json:"health"`
+	OriginalURL string `json:"-"`
+	ID          string `json:"id"`
+	StationID   string `json:"station_id"`
+	URL         string `json:"-"`
+	UUID        string `json:"radio_browser_uuid,omitempty"`
+	Codec       string `json:"codec"`
+	Bitrate     int    `json:"bitrate_kbps"`
+	HLS         bool   `json:"adaptive"`
+	Health      Health `json:"health"`
 }
 
 func (v StreamVariant) Station(channel Station) Station {
+	channel.OriginalURL = v.OriginalURL
 	channel.URL, channel.Codec, channel.Bitrate, channel.HLS = v.URL, v.Codec, v.Bitrate, v.HLS
 	channel.RBUUID, channel.VariantID = v.UUID, v.ID
 	channel.Variants = nil

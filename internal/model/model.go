@@ -18,23 +18,24 @@ type Capabilities struct {
 var LegacyXML = Capabilities{HTTP: true, MP3: true, AAC: true, ICY: true}
 
 type Station struct {
-	Direct    bool            `json:"direct"`
-	Favicon   string          `json:"favicon,omitempty"`
-	Homepage  string          `json:"homepage,omitempty"`
-	VariantID string          `json:"-"`
-	Variants  []StreamVariant `json:"streams,omitempty"`
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	URL       string          `json:"-"`
-	StreamID  string          `json:"stream_id"`
-	Codec     string          `json:"codec"`
-	Bitrate   int             `json:"bitrate_kbps"`
-	RBUUID    string          `json:"radio_browser_uuid,omitempty"`
-	Source    string          `json:"source"`
-	Country   string          `json:"country"`
-	Tags      string          `json:"tags"`
-	Language  string          `json:"language"`
-	HLS       bool            `json:"hls"`
+	OriginalURL string          `json:"-"`
+	Direct      bool            `json:"direct"`
+	Favicon     string          `json:"favicon,omitempty"`
+	Homepage    string          `json:"homepage,omitempty"`
+	VariantID   string          `json:"-"`
+	Variants    []StreamVariant `json:"streams,omitempty"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	URL         string          `json:"-"`
+	StreamID    string          `json:"stream_id"`
+	Codec       string          `json:"codec"`
+	Bitrate     int             `json:"bitrate_kbps"`
+	RBUUID      string          `json:"radio_browser_uuid,omitempty"`
+	Source      string          `json:"source"`
+	Country     string          `json:"country"`
+	Tags        string          `json:"tags"`
+	Language    string          `json:"language"`
+	HLS         bool            `json:"hls"`
 }
 type Device struct {
 	ID           string       `json:"id"`

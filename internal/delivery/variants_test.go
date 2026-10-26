@@ -146,3 +146,11 @@ func TestRadioDirectURLPreservesExternalFeed(t *testing.T) {
 		t.Fatalf("relay: %q %v", got, err)
 	}
 }
+
+func TestDirectUsesOriginalDirectoryTransport(t *testing.T) {
+	s := model.Station{Direct: true, Source: "radio-browser", Variants: []model.StreamVariant{{ID: "feed", URL: "https://example.com/resolved", OriginalURL: "http://example.com/original?token=a%2Fb&source=radio", Codec: "AAC", Bitrate: 48}}}
+	got, _, err := RadioPlayURL("http://proxy.local", s, model.Device{Capabilities: model.LegacyXML}, "")
+	if err != nil || got != s.Variants[0].OriginalURL {
+		t.Fatal(got, err)
+	}
+}
