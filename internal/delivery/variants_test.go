@@ -130,8 +130,8 @@ func TestProbeUsesAlternativeWithoutSavingUnsavedChannel(t *testing.T) {
 
 func TestRadioDirectURLPreservesExternalFeed(t *testing.T) {
 	s := model.Station{ID: "1001", StreamID: "opaque", Direct: true, Variants: []model.StreamVariant{
-		{ID: "mp3", URL: "https://example.com/live.mp3?token=a%2Fb&source=original", Codec: "MP3", Bitrate: 128},
-		{ID: "aac", URL: "https://example.com/live.aac?token=c%2Bd&source=original", Codec: "AAC", Bitrate: 192},
+		{ID: "mp3", URL: "http://example.com/live.mp3?token=a%2Fb&source=original", Codec: "MP3", Bitrate: 128},
+		{ID: "aac", URL: "http://example.com/live.aac?token=c%2Bd&source=original", Codec: "AAC", Bitrate: 192},
 	}}
 	d := model.Device{ID: "kitchen", Capabilities: model.LegacyXML}
 	for _, v := range s.Variants {
@@ -148,9 +148,31 @@ func TestRadioDirectURLPreservesExternalFeed(t *testing.T) {
 }
 
 func TestDirectUsesOriginalDirectoryTransport(t *testing.T) {
-	s := model.Station{Direct: true, Source: "radio-browser", Variants: []model.StreamVariant{{ID: "feed", URL: "https://example.com/resolved", OriginalURL: "http://example.com/original?token=a%2Fb&source=radio", Codec: "AAC", Bitrate: 48}}}
+	s := model.Station{Direct: true, Source: "radio-browser", Variants: []model.StreamVariant{{ID: "feed", URL: "http://example.com/resolved", OriginalURL: "http://example.com/original?token=a%2Fb&source=radio", Codec: "AAC", Bitrate: 48}}}
 	got, _, err := RadioPlayURL("http://proxy.local", s, model.Device{Capabilities: model.LegacyXML}, "")
 	if err != nil || got != s.Variants[0].OriginalURL {
 		t.Fatal(got, err)
+	}
+}
+
+func TestDirectProxiesUnsupportedTransports(t *testing.T) {
+	for _, tc := range []struct {
+		name, raw, original string
+		hls                 bool
+		health              model.Health
+	}{
+		{name: "HTTPS", raw: "https://example.com/live"},
+		{name: "resolved HTTPS", raw: "https://example.com/live", original: "http://example.com/live"},
+		{name: "checked redirect", raw: "http://example.com/live", health: model.Health{HTTPS: true, FinalURL: "https://example.com/live"}},
+		{name: "HLS", raw: "http://example.com/live.m3u8", hls: true},
+		{name: "DASH", raw: "http://example.com/live.mpd"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := model.Station{ID: "1001", StreamID: "opaque", Direct: true, Variants: []model.StreamVariant{{ID: "feed", URL: tc.raw, OriginalURL: tc.original, Codec: "AAC", HLS: tc.hls, Health: tc.health}}}
+			got, _, err := RadioPlayURL("https://proxy.local", s, model.Device{ID: "pure", Capabilities: model.LegacyXML}, "")
+			if err != nil || got != "http://proxy.local/stream/opaque?radio=pure" {
+				t.Fatal(got, err)
+			}
+		})
 	}
 }

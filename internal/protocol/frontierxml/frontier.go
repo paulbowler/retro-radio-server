@@ -182,7 +182,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					items = append(items, Item{Type: "Station", ID: s.ID, Name: s.Name, URL: play, Desc: stationDescription(s), Logo: text(h.Base + "/artwork/" + s.ID + ".jpg"), Format: "Radio", Location: s.Country, Bitrate: s.Bitrate, Mime: s.Codec, Reliability: 5})
 					count = 1
 					h.Store.Log(d.ID, "Station lookup", s.Name)
-					if strings.HasPrefix(play, h.Base+"/stream/") {
+					if strings.HasPrefix(play, strings.Replace(h.Base, "https://", "http://", 1)+"/stream/") {
 						h.Store.Log(d.ID, "Compatibility proxy", "Upstream audio relayed over HTTP")
 					} else if s.Direct {
 						h.Store.Log(d.ID, "Direct connection", s.Name+": external feed URL sent to radio")

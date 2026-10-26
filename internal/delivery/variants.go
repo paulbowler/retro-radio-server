@@ -96,17 +96,30 @@ func RadioPlayURL(base string, s model.Station, d model.Device, preferred string
 	if err != nil {
 		return "", s, err
 	}
-	if s.Direct {
-		if selected.OriginalURL != "" {
-			original := selected
-			original.URL = selected.OriginalURL
-			if err := selectionURL(original); err != nil {
-				return "", selected, err
-			}
-			return selected.OriginalURL, selected, nil
-		}
-		return selected.URL, selected, nil
+	raw := selected.URL
+	if selected.OriginalURL != "" {
+		raw = selected.OriginalURL
 	}
+	original := selected
+	original.URL = raw
+	u, parseErr := url.Parse(raw)
+	resolved, _ := url.Parse(selected.URL)
+	requiresProxy := selected.HLS || adaptiveKind(raw, "", selected.HLS) != "" || (resolved != nil && resolved.Scheme == "https")
+	for _, v := range s.Variants {
+		if v.ID == selected.VariantID {
+			final, _ := url.Parse(v.Health.FinalURL)
+			requiresProxy = requiresProxy || v.Health.HTTPS || v.Health.Adaptive != "" || (final != nil && final.Scheme == "https")
+		}
+	}
+	if s.Direct && parseErr == nil && u.Scheme == "http" && !requiresProxy && selectionURL(original) == nil {
+		return raw, selected, nil
+	}
+	// The legacy radio always reaches the proxy over HTTP.
+	if origin, e := url.Parse(base); e == nil {
+		origin.Scheme = "http"
+		base = origin.String()
+	}
+
 	// Radios use the relay so playback can be observed even when the upstream
 	// could otherwise be played directly. The radio ID survives reverse proxies.
 	play := base + "/stream/" + s.StreamID + "?radio=" + url.QueryEscape(d.ID)

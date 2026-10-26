@@ -261,6 +261,6 @@ LAN host rule; an exact listening-link rule grants no additional LAN paths.
 
 ### Direct station connections
 
-Each saved station has a **Radio connection** setting: **Via Retro Radio** (the default) or **Connect directly**. Direct mode gives the radio the exact external URL of its selected audio stream, including its query string, without a proxy redirect or added radio parameters. The setting applies to all radios and persists across restarts. Reselect the station on the radio after changing it; existing playback and previously saved URL presets are unchanged.
+Each saved station has a **Radio connection** setting: **Via Retro Radio** (the default) or **Connect directly**. Direct mode gives the radio the exact original HTTP feed URL, including its query string. HTTPS feeds, feeds known to redirect to HTTPS, and HLS/DASH feeds continue through the HTTP proxy. The setting applies to all radios and persists across restarts. Reselect the station on the radio after changing it; existing playback and previously saved URL presets are unchanged.
 
-Direct playback requires the radio itself to support the feed’s HTTPS and audio format (including HLS/DASH where applicable). Retro Radio does not convert, buffer, reconnect, or track direct playback. The browser player continues to use the relay. Switch back to **Via Retro Radio** if the feed does not play directly.
+Direct playback is limited to HTTP audio feeds the radio can decode. Retro Radio does not convert, buffer, reconnect, or track direct playback. The browser player continues to use the relay. Switch back to **Via Retro Radio** if the feed does not play directly.

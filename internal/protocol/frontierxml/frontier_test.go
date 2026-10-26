@@ -284,7 +284,7 @@ func TestAACTrialAdvertisedAndPlayable(t *testing.T) {
 
 func TestDirectStationLookupReturnsExactFeed(t *testing.T) {
 	h := newHandler(t)
-	raw := "https://example.com/live.aac?token=a%2Fb&source=radio"
+	raw := "http://example.com/live.aac?token=a%2Fb&source=radio"
 	s, err := h.Store.SaveStation(model.Station{Name: "Direct FM", URL: raw, Codec: "AAC", Bitrate: 128, Source: "custom"})
 	if err != nil {
 		t.Fatal(err)
