@@ -96,6 +96,9 @@ func RadioPlayURL(base string, s model.Station, d model.Device, preferred string
 	if err != nil {
 		return "", s, err
 	}
+	if s.Direct {
+		return selected.URL, selected, nil
+	}
 	// Radios use the relay so playback can be observed even when the upstream
 	// could otherwise be played directly. The radio ID survives reverse proxies.
 	play := base + "/stream/" + s.StreamID + "?radio=" + url.QueryEscape(d.ID)

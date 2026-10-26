@@ -18,6 +18,7 @@ type Capabilities struct {
 var LegacyXML = Capabilities{HTTP: true, MP3: true, AAC: true, ICY: true}
 
 type Station struct {
+	Direct    bool            `json:"direct"`
 	Favicon   string          `json:"favicon,omitempty"`
 	Homepage  string          `json:"homepage,omitempty"`
 	VariantID string          `json:"-"`

@@ -281,3 +281,25 @@ func TestAACTrialAdvertisedAndPlayable(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectStationLookupReturnsExactFeed(t *testing.T) {
+	h := newHandler(t)
+	raw := "https://example.com/live.aac?token=a%2Fb&source=radio"
+	s, err := h.Store.SaveStation(model.Station{Name: "Direct FM", URL: raw, Codec: "AAC", Bitrate: 128, Source: "custom"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = h.Store.SetStationDirect(s.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	path := "/setupapp/pure/asp/BrowseXML/Search.asp?sSearchtype=3&Search=" + s.ID + "&mac=direct-fixture"
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+	var result list
+	if err = xml.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 2 || result.Items[1].URL != raw || result.Items[1].Mime != "AAC" {
+		t.Fatal(w.Body.String())
+	}
+}

@@ -184,6 +184,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					h.Store.Log(d.ID, "Station lookup", s.Name)
 					if strings.HasPrefix(play, h.Base+"/stream/") {
 						h.Store.Log(d.ID, "Compatibility proxy", "Upstream audio relayed over HTTP")
+					} else if s.Direct {
+						h.Store.Log(d.ID, "Direct connection", s.Name+": external feed URL sent to radio")
 					}
 				}
 			}

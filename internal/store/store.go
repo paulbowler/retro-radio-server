@@ -26,7 +26,10 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{DB: db}
-	if err = s.migrate(); err != nil {
+	if err = s.migrate(); err == nil {
+		err = s.migrateV12()
+	}
+	if err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -40,7 +43,7 @@ func (s *Store) migrate() error {
 	if err := s.DB.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_migrations`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 11 {
+	if version > 12 {
 		return fmt.Errorf("database schema %d is newer than this server", version)
 	}
 	if version >= 1 {

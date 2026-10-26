@@ -83,3 +83,23 @@ func TestChannelAdmissionTestsAlternativesAndKeepsOneRadioFavourite(t *testing.T
 		t.Fatal("re-add duplicated channel", again, err)
 	}
 }
+
+func TestStationDeliveryControl(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "direct.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.DB.Close()
+	app := &App{Store: s, Relay: delivery.New(s), Base: "http://radio.local"}
+	for _, mode := range []string{"direct", "proxy"} {
+		r := httptest.NewRequest("POST", "http://radio.local/stations/delivery", strings.NewReader(url.Values{"station": {"1001"}, "delivery": {mode}, "context": {"/stations"}}.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("HX-Request", "true")
+		w := httptest.NewRecorder()
+		app.Handler().ServeHTTP(w, r)
+		station, err := s.Station("1001", false)
+		if w.Code != 200 || err != nil || station.Direct != (mode == "direct") || !strings.Contains(w.Body.String(), "Connect directly") || !strings.Contains(w.Body.String(), "/stream/"+station.StreamID) {
+			t.Fatal(w.Code, w.Body.String(), station, err)
+		}
+	}
+}

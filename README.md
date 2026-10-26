@@ -258,3 +258,9 @@ use the same pinned transport. LAN HLS/DASH playlists are not supported by this
 exception. Catalogue and podcast fetching remain public-only. Custom-station
 logo discovery may fetch publisher pages and images within an already configured
 LAN host rule; an exact listening-link rule grants no additional LAN paths.
+
+### Direct station connections
+
+Each saved station has a **Radio connection** setting: **Via Retro Radio** (the default) or **Connect directly**. Direct mode gives the radio the exact external URL of its selected audio stream, including its query string, without a proxy redirect or added radio parameters. The setting applies to all radios and persists across restarts. Reselect the station on the radio after changing it; existing playback and previously saved URL presets are unchanged.
+
+Direct playback requires the radio itself to support the feed’s HTTPS and audio format (including HLS/DASH where applicable). Retro Radio does not convert, buffer, reconnect, or track direct playback. The browser player continues to use the relay. Switch back to **Via Retro Radio** if the feed does not play directly.

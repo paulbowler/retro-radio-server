@@ -258,6 +258,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /stations/candidate/check", a.checkCandidate)
 	mux.HandleFunc("GET /diagnostics", a.diagnostics)
 	mux.HandleFunc("POST /stations/audio", a.audioOptions)
+	mux.HandleFunc("POST /stations/delivery", a.stationDelivery)
 	mux.HandleFunc("GET /api/v1/devices", func(w http.ResponseWriter, r *http.Request) { v, e := a.Store.Devices(); respond(w, v, e) })
 	mux.HandleFunc("GET /api/v1/stations", func(w http.ResponseWriter, r *http.Request) {
 		v, e := a.Store.Stations(r.URL.Query().Get("q"))

@@ -146,6 +146,9 @@ func (s *Store) Variants(id string) ([]model.StreamVariant, error) {
 	return out, rows.Err()
 }
 func (s *Store) withVariants(a model.Station) (model.Station, error) {
+	if err := s.DB.QueryRow(`SELECT direct FROM stations WHERE id=?`, a.ID).Scan(&a.Direct); err != nil {
+		return a, err
+	}
 	vs, err := s.Variants(a.ID)
 	a.Variants = vs
 	return a, err

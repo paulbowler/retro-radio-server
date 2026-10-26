@@ -127,3 +127,22 @@ func TestProbeUsesAlternativeWithoutSavingUnsavedChannel(t *testing.T) {
 		t.Fatal("probe persisted health")
 	}
 }
+
+func TestRadioDirectURLPreservesExternalFeed(t *testing.T) {
+	s := model.Station{ID: "1001", StreamID: "opaque", Direct: true, Variants: []model.StreamVariant{
+		{ID: "mp3", URL: "https://example.com/live.mp3?token=a%2Fb&source=original", Codec: "MP3", Bitrate: 128},
+		{ID: "aac", URL: "https://example.com/live.aac?token=c%2Bd&source=original", Codec: "AAC", Bitrate: 192},
+	}}
+	d := model.Device{ID: "kitchen", Capabilities: model.LegacyXML}
+	for _, v := range s.Variants {
+		got, selected, err := RadioPlayURL("http://radio.local", s, d, v.ID)
+		if err != nil || got != v.URL || selected.Codec != v.Codec {
+			t.Fatalf("direct: %q %+v %v", got, selected, err)
+		}
+	}
+	s.Direct = false
+	got, _, err := RadioPlayURL("http://radio.local", s, d, "aac")
+	if err != nil || got != "http://radio.local/stream/opaque?radio=kitchen&device=kitchen" {
+		t.Fatalf("relay: %q %v", got, err)
+	}
+}
